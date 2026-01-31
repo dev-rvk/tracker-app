@@ -1,0 +1,76 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+:root {
+  --background: 250 0.005 0.98; /* Converted to HSL-ish or just mapped, but NativeWind uses CSS vars. Let's try raw values if possible, or HEX. */
+  /* Actually, NativeWind recommends using CSS variables for theming. */
+  /* Let's stick to the OKLCH values if we can, but React Native might not render them. 
+     I will convert them to hex for safety in this pass to ensure it works on mobile. */
+
+  /* Light Mode */
+  --background: #fafafa; /* oklch(0.98 0.005 250) approx */
+  --foreground: #262626; /* oklch(0.15 0.01 250) */
+  --card: rgba(255, 255, 255, 0.7);
+  --card-foreground: #262626;
+  --popover: rgba(255, 255, 255, 0.85);
+  --popover-foreground: #262626;
+  --primary: #4f46e5; /* oklch(0.55 0.15 250) approx indigo-600 */
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #10b981; /* oklch(0.65 0.18 160) approx emerald-500 */
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(228, 228, 231, 0.5);
+  --input: #f4f4f5;
+  --ring: #4f46e5;
+  --radius: 16px; 
+
+  /* Custom glass tokens */
+  --glass: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-heavy: rgba(255, 255, 255, 0.85);
+
+  /* Tag colors */
+  --tag-health: #10b981;
+  --tag-academic: #4f46e5;
+  --tag-fitness: #f59e0b;
+  --tag-work: #db2777;
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: rgba(24, 24, 27, 0.7);
+  --card-foreground: #fafafa;
+  --popover: rgba(24, 24, 27, 0.85);
+  --popover-foreground: #fafafa;
+  --primary: #6366f1;
+  --primary-foreground: #000000;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #34d399;
+  --accent-foreground: #000000;
+  --destructive: #f87171;
+  --destructive-foreground: #ffffff;
+  --border: rgba(39, 39, 42, 0.5);
+  --input: #27272a;
+  --ring: #6366f1;
+
+  /* Custom glass tokens */
+  --glass: rgba(24, 24, 27, 0.6);
+  --glass-border: rgba(39, 39, 42, 0.3);
+  --glass-heavy: rgba(24, 24, 27, 0.85);
+
+  /* Tag colors */
+  --tag-health: #34d399;
+  --tag-academic: #6366f1;
+  --tag-fitness: #fbbf24;
+  --tag-work: #f472b6;
+}
