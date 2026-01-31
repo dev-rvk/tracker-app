@@ -14,10 +14,11 @@ export function Card({
     variant = "default",
     ...props
 }: CardProps) {
+    // Using explicit dark: variants for proper dark mode support
     const variantStyles = {
-        default: "bg-card shadow-sm",
-        elevated: "bg-card shadow-lg",
-        outlined: "bg-card/80 border border-border",
+        default: "bg-white dark:bg-zinc-900 shadow-sm",
+        elevated: "bg-white dark:bg-zinc-900 shadow-lg",
+        outlined: "bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-700",
     };
 
     return (

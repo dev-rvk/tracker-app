@@ -23,7 +23,17 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "bundler": "metro",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Trackr",
+      "shortName": "Trackr",
+      "lang": "en",
+      "themeColor": "#6366f1",
+      "backgroundColor": "#09090b",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "scope": "/"
     },
     "plugins": [
       "expo-router",

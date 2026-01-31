@@ -39,8 +39,8 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
 
     if (!tracker) {
         return (
-            <View className="flex-1 items-center justify-center bg-background">
-                <Text className="text-foreground text-lg">Tracker not found</Text>
+            <View className="flex-1 items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+                <Text className="text-zinc-950 dark:text-zinc-50 text-lg">Tracker not found</Text>
             </View>
         );
     }
@@ -166,26 +166,32 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
     return (
         <View className="flex-1">
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-            <LinearGradient colors={gradientColors} className="absolute inset-0" start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
+            <LinearGradient
+                key={colorScheme}
+                colors={gradientColors}
+                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+            />
             <SafeAreaView className="flex-1">
                 <ScrollView contentContainerStyle={{ paddingBottom: 50 }} className="px-6 py-8">
                     {/* Header */}
                     <View className="flex-row items-center gap-4 mb-8 pt-2">
                         <IconButton onPress={() => router.back()} className="w-12 h-12" variant="ghost">
-                            <ArrowLeft size={24} className="text-foreground" />
+                            <ArrowLeft size={24} color={isDark ? '#ffffff' : '#09090b'} />
                         </IconButton>
                         <View className="flex-1">
-                            <Text className="text-foreground text-3xl font-bold">{tracker.name}</Text>
-                            <Text className="text-muted-foreground text-base mt-0.5">Tracking in {tracker.unit}</Text>
+                            <Text className="text-zinc-950 dark:text-zinc-50 text-3xl font-bold">{tracker.name}</Text>
+                            <Text className="text-zinc-500 dark:text-zinc-400 text-base mt-0.5">Tracking in {tracker.unit}</Text>
                         </View>
                         <IconButton onPress={handleDelete} className="w-12 h-12" variant="ghost">
-                            <Trash2 size={22} className="text-destructive" />
+                            <Trash2 size={22} color="#ef4444" />
                         </IconButton>
                     </View>
 
                     {/* Add Entry */}
                     <Card className="mb-5" variant="elevated" contentClassName="p-5">
-                        <Text className="text-foreground text-lg font-semibold mb-4">Add Entry</Text>
+                        <Text className="text-zinc-950 dark:text-zinc-50 text-lg font-semibold mb-4">Add Entry</Text>
                         <View className="flex-row gap-3">
                             <TextInput
                                 value={newValue}
@@ -193,7 +199,7 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
                                 keyboardType="numeric"
                                 placeholder={`Enter ${tracker.unit}...`}
                                 placeholderTextColor="#a1a1aa"
-                                className="flex-1 bg-muted rounded-xl px-5 py-4 text-foreground text-base"
+                                className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl px-5 py-4 text-zinc-950 dark:text-zinc-50 text-base"
                             />
                             <TouchableOpacity
                                 onPress={handleAddEntry}
@@ -208,28 +214,28 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
 
                     {/* Current Value */}
                     <Card className="mb-5" variant="elevated" contentClassName="p-6">
-                        <Text className="text-foreground text-lg font-semibold mb-4">Current Progress</Text>
+                        <Text className="text-zinc-950 dark:text-zinc-50 text-lg font-semibold mb-4">Current Progress</Text>
                         <View className="flex-row items-start justify-between">
                             <View>
-                                <Text className="text-muted-foreground text-sm mb-1">Current</Text>
-                                <Text className="text-foreground text-5xl font-bold">
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-sm mb-1">Current</Text>
+                                <Text className="text-zinc-950 dark:text-zinc-50 text-5xl font-bold">
                                     {currentValue}
-                                    <Text className="text-muted-foreground text-xl font-normal"> {tracker.unit}</Text>
+                                    <Text className="text-zinc-500 dark:text-zinc-400 text-xl font-normal"> {tracker.unit}</Text>
                                 </Text>
                             </View>
                             {tracker.entries.length > 1 && (
                                 <View className={cn(
                                     "flex-row items-center gap-2 px-3 py-1.5 rounded-full",
-                                    isPositiveTrend ? "bg-accent/10" : "bg-destructive/10"
+                                    isPositiveTrend ? "bg-emerald-500/10" : "bg-destructive/10"
                                 )}>
                                     {isPositiveTrend ? (
-                                        <TrendingDown size={18} className="text-accent" />
+                                        <TrendingDown size={18} className="text-emerald-500" />
                                     ) : (
                                         <TrendingUp size={18} className="text-destructive" />
                                     )}
                                     <Text className={cn(
                                         "text-base font-semibold",
-                                        isPositiveTrend ? "text-accent" : "text-destructive"
+                                        isPositiveTrend ? "text-emerald-500" : "text-destructive"
                                     )}>{Math.abs(totalChange).toFixed(1)} {tracker.unit}</Text>
                                 </View>
                             )}
@@ -237,16 +243,16 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
 
                         <View className="flex-row justify-between mt-6 pt-5 border-t border-border">
                             <View>
-                                <Text className="text-muted-foreground text-xs uppercase font-semibold mb-1">Start</Text>
-                                <Text className="text-foreground text-lg font-semibold">{startValue.toFixed(1)}</Text>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-xs uppercase font-semibold mb-1">Start</Text>
+                                <Text className="text-zinc-950 dark:text-zinc-50 text-lg font-semibold">{startValue.toFixed(1)}</Text>
                             </View>
                             <View>
-                                <Text className="text-muted-foreground text-xs uppercase font-semibold mb-1">Lowest</Text>
-                                <Text className="text-accent text-lg font-semibold">{lowestValue.toFixed(1)}</Text>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-xs uppercase font-semibold mb-1">Lowest</Text>
+                                <Text className="text-emerald-500 text-lg font-semibold">{lowestValue.toFixed(1)}</Text>
                             </View>
                             <View>
-                                <Text className="text-muted-foreground text-xs uppercase font-semibold mb-1">Highest</Text>
-                                <Text className="text-foreground text-lg font-semibold">{highestValue.toFixed(1)}</Text>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-xs uppercase font-semibold mb-1">Highest</Text>
+                                <Text className="text-zinc-950 dark:text-zinc-50 text-lg font-semibold">{highestValue.toFixed(1)}</Text>
                             </View>
                         </View>
                     </Card>
@@ -254,7 +260,7 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
                     {/* Chart */}
                     <Card variant="elevated" contentClassName="p-0">
                         <View className="p-5 pb-0">
-                            <Text className="text-foreground text-lg font-semibold mb-5">Trends</Text>
+                            <Text className="text-zinc-950 dark:text-zinc-50 text-lg font-semibold mb-5">Trends</Text>
                             <View className="flex-row gap-2 mb-5" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', padding: 6, borderRadius: 12 }}>
                                 {timeRanges.map(r => (
                                     <TouchableOpacity
@@ -366,7 +372,7 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
                                 </Svg>
                             ) : (
                                 <View className="py-12 items-center">
-                                    <Text className="text-muted-foreground text-base">No data for this period</Text>
+                                    <Text className="text-zinc-500 dark:text-zinc-400 text-base">No data for this period</Text>
                                 </View>
                             )}
                         </View>

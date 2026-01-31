@@ -1,13 +1,12 @@
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTrackers } from "@/context/TrackerContext";
-import { cn } from "@/lib/utils";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ChevronRight, Moon, Plus, Settings, Sun, Target, TrendingUp, X } from "lucide-react-native";
+import { ArrowDown, ArrowUp, ChevronRight, Minus, Moon, Plus, Settings, Sun, Target, TrendingUp, X } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import React, { useState } from "react";
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, Switch, Text, View } from "react-native";
+import { ActivityIndicator, SafeAreaView, ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
 
 type TabType = "goals" | "measurements";
 
@@ -15,8 +14,8 @@ export function Dashboard() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<TabType>("goals");
     const [showSettings, setShowSettings] = useState(false);
-    const { colorScheme, toggleColorScheme } = useColorScheme();
-    const { store, loading } = useTrackers();
+    const { colorScheme, setColorScheme } = useColorScheme();
+    const { store, loading, incrementGoal, decrementGoal, getCurrentPeriodProgress, getStatsByTag } = useTrackers();
 
     const isDark = colorScheme === "dark";
 
@@ -24,24 +23,56 @@ export function Dashboard() {
         ? ["#09090b", "#18181b"] as const
         : ["#f8fafc", "#f1f5f9"] as const;
 
-    // Calculate stats
-    const totalGoalTasks = store.goals.reduce((acc, g) => acc + g.tasks.length, 0);
-    const completedGoalTasks = store.goals.reduce((acc, g) => acc + g.tasks.filter(t => t.completed).length, 0);
+    // Calculate overall stats
+    const tagStats = getStatsByTag();
+    const totalCurrentProgress = tagStats.reduce((acc, t) => acc + t.currentProgress, 0);
+    const totalCurrentTarget = tagStats.reduce((acc, t) => acc + t.currentTarget, 0);
+
+    const getTagBgColor = (tagColor: string) => {
+        switch (tagColor) {
+            case 'bg-tag-health': return '#10b981';
+            case 'bg-tag-academic': return '#6366f1';
+            case 'bg-tag-fitness': return '#f59e0b';
+            case 'bg-tag-work': return '#db2777';
+            default: return '#6366f1';
+        }
+    };
+
+    const getPeriodLabel = (period: "daily" | "weekly" | "monthly") => {
+        switch (period) {
+            case "daily": return "today";
+            case "weekly": return "this week";
+            case "monthly": return "this month";
+        }
+    };
+
+    const getPeriodDescription = (tracker: any) => {
+        if (tracker.period === "daily") {
+            return "Daily";
+        } else if (tracker.period === "weekly") {
+            return `Weekly • Starts ${tracker.startDay}`;
+        } else {
+            return `Monthly • Starts day ${tracker.startDate || 1}`;
+        }
+    };
 
     if (loading) {
         return (
-            <View className="flex-1 items-center justify-center bg-background">
+            <View className="flex-1 items-center justify-center bg-zinc-50 dark:bg-zinc-950">
                 <ActivityIndicator size="large" color="#6366f1" />
             </View>
         );
     }
 
+    // Debug: log colorScheme
+
     return (
         <View className="flex-1">
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
             <LinearGradient
+                key={colorScheme}
                 colors={gradientColors}
-                className="absolute inset-0"
+                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
             />
@@ -55,8 +86,8 @@ export function Dashboard() {
                     {/* Header */}
                     <View className="flex-row items-center justify-between mb-8 pt-2">
                         <View>
-                            <Text className="text-foreground text-4xl font-bold tracking-tight">Trackr</Text>
-                            <Text className="text-muted-foreground text-base mt-1">Keep moving forward</Text>
+                            <Text className="text-zinc-950 dark:text-zinc-50 text-4xl font-bold tracking-tight">Trackr</Text>
+                            <Text className="text-zinc-500 dark:text-zinc-400 text-base mt-1">Keep moving forward</Text>
                         </View>
                         <IconButton
                             onPress={() => setShowSettings(true)}
@@ -64,149 +95,294 @@ export function Dashboard() {
                             variant="ghost"
                             accessibilityLabel="Settings"
                         >
-                            <Settings size={24} className="text-foreground" strokeWidth={2} />
+                            <Settings size={24} color={isDark ? '#ffffff' : '#09090b'} strokeWidth={2} />
                         </IconButton>
+                    </View>
+
+                    {/* Quick Stats - ABOVE TABS */}
+                    <View className="flex-row gap-4 mb-6">
+                        <Card className="flex-1" variant="elevated" contentClassName="p-5">
+                            <View className="flex-row items-center gap-3 mb-3">
+                                <View className="w-11 h-11 rounded-full bg-indigo-100 dark:bg-indigo-500/20 items-center justify-center">
+                                    <Target size={20} color="#6366f1" strokeWidth={2.5} />
+                                </View>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-sm font-semibold uppercase tracking-wide">Goals</Text>
+                            </View>
+                            <View className="flex-row items-baseline gap-1">
+                                <Text className="text-zinc-950 dark:text-zinc-50 text-3xl font-bold">{totalCurrentProgress}</Text>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-lg">/{totalCurrentTarget}</Text>
+                            </View>
+                        </Card>
+
+                        <Card className="flex-1" variant="elevated" contentClassName="p-5">
+                            <View className="flex-row items-center gap-3 mb-3">
+                                <View className="w-11 h-11 rounded-full bg-emerald-100 dark:bg-emerald-500/20 items-center justify-center">
+                                    <TrendingUp size={20} color="#10b981" strokeWidth={2.5} />
+                                </View>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-sm font-semibold uppercase tracking-wide">Metrics</Text>
+                            </View>
+                            <View className="flex-row items-baseline gap-1">
+                                <Text className="text-zinc-950 dark:text-zinc-50 text-3xl font-bold">{store.measurements.length}</Text>
+                                <Text className="text-zinc-500 dark:text-zinc-400 text-base">Active</Text>
+                            </View>
+                        </Card>
                     </View>
 
                     {/* Tabs */}
                     <Card className="mb-8" variant="elevated" contentClassName="p-2">
                         <View className="flex-row">
-                            <Pressable
+                            <TouchableOpacity
                                 onPress={() => setActiveTab("goals")}
-                                className={cn(
-                                    "flex-1 py-4 rounded-xl flex-row items-center justify-center gap-3",
-                                    activeTab === "goals" ? "bg-primary" : "bg-transparent"
-                                )}
+                                activeOpacity={0.7}
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10,
+                                    backgroundColor: activeTab === "goals" ? '#6366f1' : 'transparent',
+                                }}
                             >
                                 <Target
                                     size={20}
-                                    className={activeTab === "goals" ? "text-primary-foreground" : "text-muted-foreground"}
+                                    color={activeTab === "goals" ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a')}
                                     strokeWidth={2.5}
                                 />
-                                <Text className={cn(
-                                    "text-base font-semibold",
-                                    activeTab === "goals" ? "text-primary-foreground" : "text-muted-foreground"
-                                )}>Goals</Text>
-                            </Pressable>
-                            <Pressable
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: '600',
+                                    color: activeTab === "goals" ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a'),
+                                }}>Goals</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
                                 onPress={() => setActiveTab("measurements")}
-                                className={cn(
-                                    "flex-1 py-4 rounded-xl flex-row items-center justify-center gap-3",
-                                    activeTab === "measurements" ? "bg-primary" : "bg-transparent"
-                                )}
+                                activeOpacity={0.7}
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10,
+                                    backgroundColor: activeTab === "measurements" ? '#6366f1' : 'transparent',
+                                }}
                             >
                                 <TrendingUp
                                     size={20}
-                                    className={activeTab === "measurements" ? "text-primary-foreground" : "text-muted-foreground"}
+                                    color={activeTab === "measurements" ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a')}
                                     strokeWidth={2.5}
                                 />
-                                <Text className={cn(
-                                    "text-base font-semibold",
-                                    activeTab === "measurements" ? "text-primary-foreground" : "text-muted-foreground"
-                                )}>Measurements</Text>
-                            </Pressable>
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: '600',
+                                    color: activeTab === "measurements" ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a'),
+                                }}>Metrics</Text>
+                            </TouchableOpacity>
                         </View>
                     </Card>
-
-                    {/* Quick Stats */}
-                    <View className="flex-row gap-4 mb-8">
-                        <Card className="flex-1" variant="elevated" contentClassName="p-5">
-                            <View className="flex-row items-center gap-3 mb-3">
-                                <View className="w-11 h-11 rounded-full bg-primary/10 items-center justify-center">
-                                    <Target size={20} className="text-primary" strokeWidth={2.5} />
-                                </View>
-                                <Text className="text-muted-foreground text-sm font-semibold uppercase tracking-wide">Goals</Text>
-                            </View>
-                            <View className="flex-row items-baseline gap-1">
-                                <Text className="text-foreground text-3xl font-bold">{completedGoalTasks}</Text>
-                                <Text className="text-muted-foreground text-lg">/{totalGoalTasks}</Text>
-                            </View>
-                        </Card>
-
-                        <Card className="flex-1" variant="elevated" contentClassName="p-5">
-                            <View className="flex-row items-center gap-3 mb-3">
-                                <View className="w-11 h-11 rounded-full bg-accent/10 items-center justify-center">
-                                    <TrendingUp size={20} className="text-accent" strokeWidth={2.5} />
-                                </View>
-                                <Text className="text-muted-foreground text-sm font-semibold uppercase tracking-wide">Metrics</Text>
-                            </View>
-                            <View className="flex-row items-baseline gap-1">
-                                <Text className="text-foreground text-3xl font-bold">{store.measurements.length}</Text>
-                                <Text className="text-muted-foreground text-base">Active</Text>
-                            </View>
-                        </Card>
-                    </View>
 
                     {/* Goals List */}
                     {activeTab === "goals" && (
                         <View className="gap-4">
-                            <Text className="text-foreground text-xl font-semibold mb-2">Your Goals</Text>
+                            <Text className="text-zinc-950 dark:text-zinc-50 text-xl font-semibold mb-2">Your Goals</Text>
                             {store.goals.length === 0 ? (
                                 <Card variant="outlined" contentClassName="p-8 items-center">
-                                    <Target size={48} className="text-muted-foreground mb-4" />
-                                    <Text className="text-foreground font-semibold text-lg mb-1">No goals yet</Text>
-                                    <Text className="text-muted-foreground text-center">Tap the + button to create your first goal tracker</Text>
+                                    <Target size={48} className="text-zinc-500 dark:text-zinc-400 mb-4" />
+                                    <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-lg mb-1">No goals yet</Text>
+                                    <Text className="text-zinc-500 dark:text-zinc-400 text-center">Tap the + button to create your first goal tracker</Text>
                                 </Card>
                             ) : (
                                 store.goals.map((tracker) => {
-                                    const completed = tracker.tasks.filter(t => t.completed).length;
-                                    const total = tracker.tasks.length;
-                                    const progress = total > 0 ? (completed / total) * 100 : 0;
+                                    const progress = getCurrentPeriodProgress(tracker.id);
+                                    const tagColor = getTagBgColor(tracker.tagColor);
 
                                     return (
                                         <Card key={tracker.id} variant="elevated" contentClassName="p-5">
-                                            <Pressable
-                                                onPress={() => router.push(`/tracker/${tracker.id}?type=goal`)}
-                                                className="active:opacity-80"
-                                            >
-                                                <View className="flex-row items-start justify-between mb-4">
-                                                    <View className="flex-1">
-                                                        <Text className="text-foreground font-semibold text-xl">{tracker.name}</Text>
-                                                        <View className="flex-row items-center gap-3 mt-2">
-                                                            <View className={`px-3 py-1 rounded-full ${tracker.tagColor}`}>
-                                                                <Text className="text-xs font-bold text-white uppercase tracking-wide">
-                                                                    {tracker.tag}
-                                                                </Text>
-                                                            </View>
-                                                            <Text className="text-muted-foreground text-sm capitalize">
-                                                                {tracker.frequency}
+                                            <View className="flex-row items-start justify-between mb-3">
+                                                <View className="flex-1">
+                                                    <View className="flex-row items-center gap-3">
+                                                        <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-xl">{tracker.name}</Text>
+                                                        <View style={{
+                                                            paddingHorizontal: 10,
+                                                            paddingVertical: 3,
+                                                            borderRadius: 12,
+                                                            backgroundColor: tagColor,
+                                                        }}>
+                                                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#ffffff', textTransform: 'uppercase' }}>
+                                                                {tracker.tag}
                                                             </Text>
                                                         </View>
                                                     </View>
-                                                    <ChevronRight size={24} className="text-muted-foreground mt-1" />
+                                                    <Text className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
+                                                        {getPeriodDescription(tracker)}
+                                                    </Text>
+                                                </View>
+                                                <TouchableOpacity
+                                                    onPress={() => router.push(`/tracker/${tracker.id}?type=goal`)}
+                                                    activeOpacity={0.6}
+                                                    style={{ padding: 4 }}
+                                                >
+                                                    <ChevronRight size={24} color={isDark ? '#71717a' : '#a1a1aa'} />
+                                                </TouchableOpacity>
+                                            </View>
+
+                                            {/* Progress Counter with +/- buttons - Fixed layout */}
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                                {/* Decrement Button */}
+                                                <TouchableOpacity
+                                                    onPress={() => decrementGoal(tracker.id)}
+                                                    disabled={progress.count <= 0}
+                                                    activeOpacity={0.7}
+                                                    style={{
+                                                        width: 36,
+                                                        height: 36,
+                                                        borderRadius: 18,
+                                                        backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        opacity: progress.count <= 0 ? 0.4 : 1,
+                                                    }}
+                                                >
+                                                    <Minus size={18} color={isDark ? '#ffffff' : '#09090b'} />
+                                                </TouchableOpacity>
+
+                                                {/* Fixed width container for 4 circles */}
+                                                <View style={{
+                                                    width: 130,
+                                                    marginHorizontal: 6,
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 6,
+                                                }}>
+                                                    {(() => {
+                                                        // Always show exactly 4 circles (or fewer if frequency < 4)
+                                                        const maxCircles = Math.min(4, tracker.frequency);
+
+                                                        // Calculate starting index to show:
+                                                        // - Show last 3 completed + 1 unchecked (until all done)
+                                                        // - If all done, show the last 4 completed
+                                                        let startIdx = 0;
+                                                        if (tracker.frequency > 4) {
+                                                            if (progress.count >= tracker.frequency) {
+                                                                // All complete: show last 4
+                                                                startIdx = tracker.frequency - 4;
+                                                            } else {
+                                                                // Show up to 3 completed + 1 unchecked
+                                                                startIdx = Math.max(0, progress.count - 3);
+                                                            }
+                                                        }
+
+                                                        return Array.from({ length: maxCircles }).map((_, idx) => {
+                                                            const actualIdx = startIdx + idx;
+                                                            const isCompleted = actualIdx < progress.count;
+                                                            return (
+                                                                <View
+                                                                    key={idx}
+                                                                    style={{
+                                                                        width: 28,
+                                                                        height: 28,
+                                                                        borderRadius: 14,
+                                                                        backgroundColor: isCompleted
+                                                                            ? tagColor
+                                                                            : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                    }}
+                                                                >
+                                                                    {isCompleted && (
+                                                                        <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 11 }}>✓</Text>
+                                                                    )}
+                                                                </View>
+                                                            );
+                                                        });
+                                                    })()}
                                                 </View>
 
-                                                <View className="gap-2">
-                                                    <View className="flex-row justify-between">
-                                                        <Text className="text-muted-foreground text-sm">Progress</Text>
-                                                        <Text className="text-foreground font-semibold text-sm">
-                                                            {Math.round(progress)}%
-                                                        </Text>
-                                                    </View>
-                                                    <View className="h-3 bg-muted rounded-full overflow-hidden">
-                                                        <View
-                                                            className={`h-full ${tracker.tagColor} rounded-full`}
-                                                            style={{ width: `${progress}%` }}
-                                                        />
-                                                    </View>
+                                                {/* Increment Button */}
+                                                <TouchableOpacity
+                                                    onPress={() => incrementGoal(tracker.id)}
+                                                    disabled={progress.count >= tracker.frequency}
+                                                    activeOpacity={0.7}
+                                                    style={{
+                                                        width: 36,
+                                                        height: 36,
+                                                        borderRadius: 18,
+                                                        backgroundColor: progress.count >= tracker.frequency
+                                                            ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)')
+                                                            : tagColor,
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        opacity: progress.count >= tracker.frequency ? 0.4 : 1,
+                                                    }}
+                                                >
+                                                    <Plus size={18} color={progress.count >= tracker.frequency ? (isDark ? '#ffffff' : '#09090b') : '#ffffff'} />
+                                                </TouchableOpacity>
+
+                                                {/* Progress text vertical stack */}
+                                                <View style={{ marginLeft: 'auto', width: 80, alignItems: 'center' }}>
+                                                    <Text className="text-zinc-950 dark:text-zinc-50 font-bold text-2xl leading-tight">
+                                                        {progress.count}/{tracker.frequency}
+                                                    </Text>
+                                                    <Text className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+                                                        {getPeriodLabel(tracker.period)}
+                                                    </Text>
                                                 </View>
-                                            </Pressable>
+                                            </View>
                                         </Card>
                                     );
                                 })
                             )}
+
+                            {/* Tag Stats */}
+                            {tagStats.length > 0 && (
+                                <View className="mt-6">
+                                    <Text className="text-zinc-950 dark:text-zinc-50 text-xl font-semibold mb-4">Progress by Tag</Text>
+                                    {tagStats.map(stat => (
+                                        <Card key={stat.tag} className="mb-3" variant="outlined" contentClassName="p-4">
+                                            <View className="flex-row items-center justify-between">
+                                                <View className="flex-row items-center gap-3">
+                                                    <View style={{
+                                                        width: 36,
+                                                        height: 36,
+                                                        borderRadius: 10,
+                                                        backgroundColor: getTagBgColor(stat.tagColor) + '20',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                    }}>
+                                                        <Target size={18} color={getTagBgColor(stat.tagColor)} />
+                                                    </View>
+                                                    <View>
+                                                        <Text className="text-zinc-950 dark:text-zinc-50 font-semibold">{stat.tag}</Text>
+                                                        <Text className="text-zinc-500 dark:text-zinc-400 text-xs">{stat.totalGoals} goal{stat.totalGoals > 1 ? 's' : ''}</Text>
+                                                    </View>
+                                                </View>
+                                                <View className="items-end">
+                                                    <Text className="text-zinc-950 dark:text-zinc-50 font-bold text-lg">
+                                                        {stat.currentProgress}/{stat.currentTarget}
+                                                    </Text>
+                                                    <Text className="text-zinc-500 dark:text-zinc-400 text-xs">current</Text>
+                                                </View>
+                                            </View>
+                                        </Card>
+                                    ))}
+                                </View>
+                            )}
                         </View>
                     )}
 
-                    {/* Measurements List */}
+                    {/* Metrics List */}
                     {activeTab === "measurements" && (
                         <View className="gap-4">
-                            <Text className="text-foreground text-xl font-semibold mb-2">Your Measurements</Text>
+                            <Text className="text-zinc-950 dark:text-zinc-50 text-xl font-semibold mb-2">Your Metrics</Text>
                             {store.measurements.length === 0 ? (
                                 <Card variant="outlined" contentClassName="p-8 items-center">
-                                    <TrendingUp size={48} className="text-muted-foreground mb-4" />
-                                    <Text className="text-foreground font-semibold text-lg mb-1">No measurements yet</Text>
-                                    <Text className="text-muted-foreground text-center">Tap the + button to create your first measurement tracker</Text>
+                                    <TrendingUp size={48} className="text-zinc-500 dark:text-zinc-400 mb-4" />
+                                    <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-lg mb-1">No measurements yet</Text>
+                                    <Text className="text-zinc-500 dark:text-zinc-400 text-center">Tap the + button to create your first measurement tracker</Text>
                                 </Card>
                             ) : (
                                 store.measurements.map((tracker) => {
@@ -215,10 +391,11 @@ export function Dashboard() {
                                     const currentValue = latestEntry?.value ?? 0;
                                     const previousValue = previousEntry?.value ?? currentValue;
                                     const trend = currentValue < previousValue ? "down" : currentValue > previousValue ? "up" : "same";
+                                    const diff = Math.abs(currentValue - previousValue);
 
                                     const getTimeAgo = (date: number) => {
-                                        const diff = Date.now() - date;
-                                        const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+                                        const diffMs = Date.now() - date;
+                                        const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
                                         if (days === 0) return "Today";
                                         if (days === 1) return "Yesterday";
                                         return `${days} days ago`;
@@ -226,38 +403,52 @@ export function Dashboard() {
 
                                     return (
                                         <Card key={tracker.id} variant="elevated" contentClassName="p-5">
-                                            <Pressable
+                                            <TouchableOpacity
                                                 onPress={() => router.push(`/tracker/${tracker.id}?type=measurement`)}
-                                                className="active:opacity-80 flex-row items-center justify-between"
+                                                activeOpacity={0.8}
+                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
                                             >
                                                 <View>
-                                                    <Text className="text-foreground font-semibold text-xl">{tracker.name}</Text>
-                                                    <Text className="text-muted-foreground text-sm mt-1">
+                                                    <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-xl">{tracker.name}</Text>
+                                                    <Text className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
                                                         Updated {latestEntry ? getTimeAgo(latestEntry.date) : "Never"}
                                                     </Text>
                                                 </View>
                                                 <View className="flex-row items-center gap-4">
                                                     <View className="items-end">
-                                                        <Text className="text-foreground text-2xl font-bold">
+                                                        <Text className="text-zinc-950 dark:text-zinc-50 text-2xl font-bold">
                                                             {currentValue}
-                                                            <Text className="text-muted-foreground text-base font-normal"> {tracker.unit}</Text>
+                                                            <Text className="text-zinc-500 dark:text-zinc-400 text-base font-normal"> {tracker.unit}</Text>
                                                         </Text>
                                                         {previousEntry && trend !== "same" && (
-                                                            <View className={`flex-row items-center gap-1 mt-1 ${trend === "down" ? "bg-accent/10" : "bg-destructive/10"} px-2 py-0.5 rounded-full`}>
+                                                            <View style={{
+                                                                flexDirection: 'row',
+                                                                alignItems: 'center',
+                                                                gap: 4,
+                                                                marginTop: 4,
+                                                                backgroundColor: trend === "down" ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                                paddingHorizontal: 8,
+                                                                paddingVertical: 2,
+                                                                borderRadius: 10,
+                                                            }}>
                                                                 {trend === "down" ? (
-                                                                    <TrendingUp size={12} className="text-accent rotate-180" />
+                                                                    <ArrowDown size={12} color="#10b981" strokeWidth={3} />
                                                                 ) : (
-                                                                    <TrendingUp size={12} className="text-destructive" />
+                                                                    <ArrowUp size={12} color="#ef4444" strokeWidth={3} />
                                                                 )}
-                                                                <Text className={`text-xs font-semibold ${trend === "down" ? "text-accent" : "text-destructive"}`}>
-                                                                    {Math.abs(currentValue - previousValue).toFixed(1)}
+                                                                <Text style={{
+                                                                    fontSize: 12,
+                                                                    fontWeight: '600',
+                                                                    color: trend === "down" ? '#10b981' : '#ef4444',
+                                                                }}>
+                                                                    {diff.toFixed(1)}
                                                                 </Text>
                                                             </View>
                                                         )}
                                                     </View>
-                                                    <ChevronRight size={24} className="text-muted-foreground" />
+                                                    <ChevronRight size={24} color={isDark ? '#71717a' : '#a1a1aa'} />
                                                 </View>
-                                            </Pressable>
+                                            </TouchableOpacity>
                                         </Card>
                                     );
                                 })
@@ -267,37 +458,48 @@ export function Dashboard() {
                 </ScrollView>
 
                 {/* Floating Add Button */}
-                <Pressable
+                <TouchableOpacity
                     onPress={() => router.push("/add-tracker")}
-                    className="absolute bottom-10 right-6 w-16 h-16 bg-primary rounded-full shadow-xl items-center justify-center active:scale-95"
+                    activeOpacity={0.9}
                     style={{
+                        position: 'absolute',
+                        bottom: 40,
+                        right: 24,
+                        width: 64,
+                        height: 64,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 32,
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         shadowColor: '#4f46e5',
                         shadowOffset: { width: 0, height: 6 },
                         shadowOpacity: 0.35,
                         shadowRadius: 10,
-                        elevation: 10
+                        elevation: 10,
                     }}
                 >
-                    <Plus size={32} className="text-primary-foreground" strokeWidth={2.5} />
-                </Pressable>
+                    <Plus size={32} color="#ffffff" strokeWidth={2.5} />
+                </TouchableOpacity>
 
                 {/* Settings Modal */}
                 {showSettings && (
                     <View className="absolute inset-0 z-50 justify-end">
-                        <Pressable
-                            className="absolute inset-0 bg-black/50"
+                        <TouchableOpacity
+                            className="absolute inset-0"
+                            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                             onPress={() => setShowSettings(false)}
+                            activeOpacity={1}
                         />
-                        <View className="bg-background rounded-t-3xl p-8 pb-12 shadow-2xl">
-                            <View className="w-14 h-1.5 bg-muted rounded-full mx-auto mb-8" />
+                        <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-8 pb-12 shadow-2xl">
+                            <View className="w-14 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full mx-auto mb-8" />
                             <View className="flex-row items-center justify-between mb-8">
-                                <Text className="text-foreground text-2xl font-bold">Settings</Text>
+                                <Text className="text-zinc-950 dark:text-zinc-50 text-2xl font-bold">Settings</Text>
                                 <IconButton
                                     onPress={() => setShowSettings(false)}
                                     className="w-11 h-11"
                                     variant="ghost"
                                 >
-                                    <X size={20} className="text-muted-foreground" />
+                                    <X size={20} color={isDark ? '#a1a1aa' : '#71717a'} />
                                 </IconButton>
                             </View>
 
@@ -305,35 +507,42 @@ export function Dashboard() {
                             <Card variant="elevated" contentClassName="py-4 px-5">
                                 <View className="flex-row items-center justify-between">
                                     <View className="flex-row items-center gap-4">
-                                        <View className="w-12 h-12 rounded-full bg-primary/10 items-center justify-center">
+                                        <View className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-500/20 items-center justify-center">
                                             {isDark ? (
-                                                <Moon size={24} className="text-primary" fill="currentColor" />
+                                                <Moon size={24} color="#6366f1" fill="#6366f1" />
                                             ) : (
-                                                <Sun size={24} className="text-primary" />
+                                                <Sun size={24} color="#6366f1" />
                                             )}
                                         </View>
                                         <View>
-                                            <Text className="text-foreground font-semibold text-lg">Dark Mode</Text>
-                                            <Text className="text-muted-foreground text-sm">
+                                            <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-lg">Dark Mode</Text>
+                                            <Text className="text-zinc-500 dark:text-zinc-400 text-sm">
                                                 {isDark ? "On" : "Off"}
                                             </Text>
                                         </View>
                                     </View>
                                     <Switch
                                         value={isDark}
-                                        onValueChange={toggleColorScheme}
+                                        onValueChange={(value) => setColorScheme(value ? 'dark' : 'light')}
                                         trackColor={{ false: "#e4e4e7", true: "#6366f1" }}
                                         thumbColor="#ffffff"
                                     />
                                 </View>
                             </Card>
 
-                            <Pressable
+                            <TouchableOpacity
                                 onPress={() => setShowSettings(false)}
-                                className="mt-8 py-5 rounded-2xl bg-primary items-center"
+                                activeOpacity={0.8}
+                                style={{
+                                    marginTop: 32,
+                                    paddingVertical: 18,
+                                    borderRadius: 16,
+                                    backgroundColor: '#6366f1',
+                                    alignItems: 'center',
+                                }}
                             >
-                                <Text className="text-primary-foreground font-semibold text-lg">Done</Text>
-                            </Pressable>
+                                <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 18 }}>Done</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 )}

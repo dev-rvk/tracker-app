@@ -1,20 +1,21 @@
 // Tracker data types
 
-export interface Task {
-    id: string;
-    name: string;
-    completed: boolean;
+// Completion record for a specific period
+export interface CompletionRecord {
+    periodStart: number;  // Timestamp of period start
+    count: number;        // How many times completed this period
 }
 
 export interface GoalTracker {
     id: string;
-    name: string;
-    tag: string;
+    name: string;                    // e.g., "Gym"
+    tag: string;                     // e.g., "Health"
     tagColor: string;
-    frequency: "daily" | "weekly" | "monthly";
-    tasks: Task[];
-    startDay?: string;  // For weekly trackers
-    startDate?: number; // For monthly trackers
+    frequency: number;               // e.g., 3 (times per period)
+    period: "daily" | "weekly" | "monthly";    // Reset period
+    startDay: string;                // e.g., "Tue" for weekly
+    startDate?: number;              // e.g., 1 for monthly
+    completions: CompletionRecord[]; // History of completions
     createdAt: number;
 }
 

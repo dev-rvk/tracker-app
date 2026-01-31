@@ -1,52 +1,91 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { GoalTracker, MeasurementEntry, MeasurementTracker, TrackerStore } from "../types/tracker";
+import { CompletionRecord, GoalTracker, MeasurementEntry, MeasurementTracker, TrackerStore } from "../types/tracker";
 
-const STORAGE_KEY = "tracker_data";
+const STORAGE_KEY = "tracker_data_v2";
 
-// Sample data to start with
+// Helper to get period start timestamp
+const getPeriodStart = (period: "daily" | "weekly" | "monthly", startDay: string, startDate?: number): number => {
+    const now = new Date();
+
+    if (period === "daily") {
+        const periodStart = new Date(now);
+        periodStart.setHours(0, 0, 0, 0);
+        return periodStart.getTime();
+    } else if (period === "weekly") {
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const targetDayIndex = dayNames.indexOf(startDay);
+        const currentDayIndex = now.getDay();
+
+        // Calculate days since the start of the week (relative to startDay)
+        let daysBack = currentDayIndex - targetDayIndex;
+        if (daysBack < 0) daysBack += 7;
+
+        const periodStart = new Date(now);
+        periodStart.setDate(now.getDate() - daysBack);
+        periodStart.setHours(0, 0, 0, 0);
+        return periodStart.getTime();
+    } else {
+        // Monthly
+        const start = startDate || 1;
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), start, 0, 0, 0, 0);
+
+        // If we're before the start date, go to previous month
+        if (now.getDate() < start) {
+            periodStart.setMonth(periodStart.getMonth() - 1);
+        }
+
+        return periodStart.getTime();
+    }
+};
+
+// Sample data
 const initialData: TrackerStore = {
     goals: [
         {
             id: "goal-1",
-            name: "Daily Steps",
+            name: "Gym",
             tag: "Health",
             tagColor: "bg-tag-health",
-            frequency: "daily",
-            tasks: [
-                { id: "t1", name: "Complete 5000 steps", completed: true },
-                { id: "t2", name: "Walk for 30 minutes", completed: false },
-                { id: "t3", name: "Take stairs", completed: true },
+            frequency: 3,
+            period: "weekly",
+            startDay: "Mon",
+            completions: [
+                { periodStart: getPeriodStart("weekly", "Mon") - 7 * 24 * 60 * 60 * 1000, count: 3 },
+                { periodStart: getPeriodStart("weekly", "Mon") - 14 * 24 * 60 * 60 * 1000, count: 2 },
+                { periodStart: getPeriodStart("weekly", "Mon") - 21 * 24 * 60 * 60 * 1000, count: 3 },
+                { periodStart: getPeriodStart("weekly", "Mon"), count: 1 },
             ],
-            createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+            createdAt: Date.now() - 28 * 24 * 60 * 60 * 1000,
         },
         {
             id: "goal-2",
-            name: "DSA Practice",
+            name: "Reading",
             tag: "Academic",
             tagColor: "bg-tag-academic",
-            frequency: "weekly",
-            tasks: [
-                { id: "t4", name: "Solve 3 LeetCode problems", completed: true },
-                { id: "t5", name: "Review algorithms", completed: true },
-                { id: "t6", name: "Practice dynamic programming", completed: false },
-            ],
+            frequency: 1,
+            period: "daily",
             startDay: "Mon",
-            createdAt: Date.now() - 14 * 24 * 60 * 60 * 1000,
+            completions: [
+                { periodStart: getPeriodStart("daily", "Mon") - 24 * 60 * 60 * 1000, count: 1 },
+                { periodStart: getPeriodStart("daily", "Mon") - 48 * 60 * 60 * 1000, count: 1 },
+                { periodStart: getPeriodStart("daily", "Mon"), count: 0 },
+            ],
+            createdAt: Date.now() - 21 * 24 * 60 * 60 * 1000,
         },
         {
             id: "goal-3",
-            name: "Gym Sessions",
-            tag: "Fitness",
-            tagColor: "bg-tag-fitness",
-            frequency: "weekly",
-            tasks: [
-                { id: "t7", name: "Go to gym 3 times", completed: true },
-                { id: "t8", name: "Complete cardio session", completed: true },
-                { id: "t9", name: "Do strength training", completed: false },
-            ],
+            name: "Meditation",
+            tag: "Health",
+            tagColor: "bg-tag-health",
+            frequency: 2,
+            period: "daily",
             startDay: "Mon",
-            createdAt: Date.now() - 21 * 24 * 60 * 60 * 1000,
+            completions: [
+                { periodStart: getPeriodStart("daily", "Mon") - 24 * 60 * 60 * 1000, count: 2 },
+                { periodStart: getPeriodStart("daily", "Mon"), count: 1 },
+            ],
+            createdAt: Date.now() - 14 * 24 * 60 * 60 * 1000,
         },
     ],
     measurements: [
@@ -81,14 +120,28 @@ const initialData: TrackerStore = {
     ],
 };
 
+interface TagStats {
+    tag: string;
+    tagColor: string;
+    totalGoals: number;
+    completedPeriods: number;
+    totalPeriods: number;
+    currentProgress: number;
+    currentTarget: number;
+}
+
 interface TrackerContextType {
     store: TrackerStore;
     loading: boolean;
     // Goal actions
-    addGoalTracker: (tracker: Omit<GoalTracker, "id" | "createdAt">) => Promise<void>;
+    addGoalTracker: (tracker: Omit<GoalTracker, "id" | "createdAt" | "completions">) => Promise<void>;
     updateGoalTracker: (id: string, updates: Partial<GoalTracker>) => Promise<void>;
     deleteGoalTracker: (id: string) => Promise<void>;
-    toggleTask: (trackerId: string, taskId: string) => Promise<void>;
+    incrementGoal: (trackerId: string) => Promise<void>;
+    decrementGoal: (trackerId: string) => Promise<void>;
+    getCurrentPeriodProgress: (trackerId: string) => { count: number; frequency: number; periodStart: number };
+    getGoalHistory: (trackerId: string, limit?: number) => CompletionRecord[];
+    getStatsByTag: () => TagStats[];
     // Measurement actions
     addMeasurementTracker: (tracker: Omit<MeasurementTracker, "id" | "createdAt" | "entries">) => Promise<void>;
     addMeasurementEntry: (trackerId: string, value: number) => Promise<void>;
@@ -139,10 +192,11 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
     const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Goal Actions
-    const addGoalTracker = useCallback(async (tracker: Omit<GoalTracker, "id" | "createdAt">) => {
+    const addGoalTracker = useCallback(async (tracker: Omit<GoalTracker, "id" | "createdAt" | "completions">) => {
         const newTracker: GoalTracker = {
             ...tracker,
             id: generateId(),
+            completions: [],
             createdAt: Date.now(),
         };
         const newStore = { ...store, goals: [...store.goals, newTracker] };
@@ -162,20 +216,111 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
         await saveData(newStore);
     }, [store]);
 
-    const toggleTask = useCallback(async (trackerId: string, taskId: string) => {
+    const incrementGoal = useCallback(async (trackerId: string) => {
+        const tracker = store.goals.find(g => g.id === trackerId);
+        if (!tracker) return;
+
+        const periodStart = getPeriodStart(tracker.period, tracker.startDay, tracker.startDate);
+        const existingRecord = tracker.completions.find(c => c.periodStart === periodStart);
+
+        // Don't increment if already at frequency limit
+        if (existingRecord && existingRecord.count >= tracker.frequency) return;
+
+        let newCompletions: CompletionRecord[];
+        if (existingRecord) {
+            newCompletions = tracker.completions.map(c =>
+                c.periodStart === periodStart ? { ...c, count: c.count + 1 } : c
+            );
+        } else {
+            newCompletions = [...tracker.completions, { periodStart, count: 1 }];
+        }
+
         const newStore = {
             ...store,
-            goals: store.goals.map(g => {
-                if (g.id === trackerId) {
-                    return {
-                        ...g,
-                        tasks: g.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t),
-                    };
-                }
-                return g;
-            }),
+            goals: store.goals.map(g =>
+                g.id === trackerId ? { ...g, completions: newCompletions } : g
+            ),
         };
         await saveData(newStore);
+    }, [store]);
+
+    const decrementGoal = useCallback(async (trackerId: string) => {
+        const tracker = store.goals.find(g => g.id === trackerId);
+        if (!tracker) return;
+
+        const periodStart = getPeriodStart(tracker.period, tracker.startDay, tracker.startDate);
+        const existingRecord = tracker.completions.find(c => c.periodStart === periodStart);
+
+        // Can't decrement if count is 0 or no record exists
+        if (!existingRecord || existingRecord.count <= 0) return;
+
+        const newCompletions = tracker.completions.map(c =>
+            c.periodStart === periodStart ? { ...c, count: c.count - 1 } : c
+        );
+
+        const newStore = {
+            ...store,
+            goals: store.goals.map(g =>
+                g.id === trackerId ? { ...g, completions: newCompletions } : g
+            ),
+        };
+        await saveData(newStore);
+    }, [store]);
+
+    const getCurrentPeriodProgress = useCallback((trackerId: string) => {
+        const tracker = store.goals.find(g => g.id === trackerId);
+        if (!tracker) return { count: 0, frequency: 0, periodStart: 0 };
+
+        const periodStart = getPeriodStart(tracker.period, tracker.startDay, tracker.startDate);
+        const record = tracker.completions.find(c => c.periodStart === periodStart);
+
+        return {
+            count: record?.count || 0,
+            frequency: tracker.frequency,
+            periodStart,
+        };
+    }, [store]);
+
+    const getGoalHistory = useCallback((trackerId: string, limit: number = 8) => {
+        const tracker = store.goals.find(g => g.id === trackerId);
+        if (!tracker) return [];
+
+        // Sort by periodStart descending and take limit
+        return [...tracker.completions]
+            .sort((a, b) => b.periodStart - a.periodStart)
+            .slice(0, limit)
+            .reverse();
+    }, [store]);
+
+    const getStatsByTag = useCallback(() => {
+        const tagMap = new Map<string, TagStats>();
+
+        for (const goal of store.goals) {
+            const existing = tagMap.get(goal.tag);
+            const periodStart = getPeriodStart(goal.period, goal.startDay, goal.startDate);
+            const currentRecord = goal.completions.find(c => c.periodStart === periodStart);
+            const completedPeriods = goal.completions.filter(c => c.count >= goal.frequency).length;
+
+            if (existing) {
+                existing.totalGoals += 1;
+                existing.completedPeriods += completedPeriods;
+                existing.totalPeriods += goal.completions.length;
+                existing.currentProgress += currentRecord?.count || 0;
+                existing.currentTarget += goal.frequency;
+            } else {
+                tagMap.set(goal.tag, {
+                    tag: goal.tag,
+                    tagColor: goal.tagColor,
+                    totalGoals: 1,
+                    completedPeriods,
+                    totalPeriods: goal.completions.length,
+                    currentProgress: currentRecord?.count || 0,
+                    currentTarget: goal.frequency,
+                });
+            }
+        }
+
+        return Array.from(tagMap.values());
     }, [store]);
 
     // Measurement Actions
@@ -225,7 +370,11 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
                 addGoalTracker,
                 updateGoalTracker,
                 deleteGoalTracker,
-                toggleTask,
+                incrementGoal,
+                decrementGoal,
+                getCurrentPeriodProgress,
+                getGoalHistory,
+                getStatsByTag,
                 addMeasurementTracker,
                 addMeasurementEntry,
                 deleteMeasurementTracker,
