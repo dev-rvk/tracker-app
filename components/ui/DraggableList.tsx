@@ -73,54 +73,65 @@ function DraggableItem<T>({
         }
     }, [isBeingDragged, dragTranslation]);
 
-    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const isActivated = useRef(false);
+    const isDragging = useRef(false);
+    const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const gesture = Gesture.Pan()
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (longPressTimeout.current) {
+                clearTimeout(longPressTimeout.current);
+            }
+        };
+    }, []);
+
+    const panGesture = Gesture.Pan()
         .manualActivation(true)
-        .onTouchesDown((_, stateManager) => {
-            // Start long press timer
-            isActivated.current = false;
-            longPressTimer.current = setTimeout(() => {
-                isActivated.current = true;
+        .onTouchesDown((event, stateManager) => {
+            // Start long press detection
+            longPressTimeout.current = setTimeout(() => {
+                isDragging.current = true;
                 stateManager.activate();
                 runOnJS(triggerHaptic)();
                 runOnJS(onDragStart)(index);
             }, 200);
         })
-        .onTouchesUp((_, stateManager) => {
-            // Cancel if released before long press
-            if (longPressTimer.current) {
-                clearTimeout(longPressTimer.current);
-                longPressTimer.current = null;
-            }
-            if (!isActivated.current) {
+        .onTouchesMove((event, stateManager) => {
+            // If we moved before long press completed, cancel and let scroll handle it
+            if (!isDragging.current && longPressTimeout.current) {
+                clearTimeout(longPressTimeout.current);
+                longPressTimeout.current = null;
                 stateManager.fail();
             }
         })
-        .onTouchesCancelled((_, stateManager) => {
-            // Cancel on gesture cancelled (e.g., scroll started)
-            if (longPressTimer.current) {
-                clearTimeout(longPressTimer.current);
-                longPressTimer.current = null;
+        .onTouchesUp((event, stateManager) => {
+            if (longPressTimeout.current) {
+                clearTimeout(longPressTimeout.current);
+                longPressTimeout.current = null;
             }
-            if (!isActivated.current) {
+            if (!isDragging.current) {
                 stateManager.fail();
             }
+        })
+        .onTouchesCancelled((event, stateManager) => {
+            if (longPressTimeout.current) {
+                clearTimeout(longPressTimeout.current);
+                longPressTimeout.current = null;
+            }
+            stateManager.fail();
         })
         .onUpdate((event) => {
-            if (isActivated.current && isBeingDragged) {
+            if (isDragging.current) {
                 localTranslation.value = event.translationY;
                 runOnJS(onDragUpdate)(event.translationY);
             }
         })
         .onEnd(() => {
-            if (isActivated.current && isBeingDragged) {
+            if (isDragging.current) {
                 const moveBy = Math.round(localTranslation.value / itemHeight);
                 const finalIndex = Math.max(0, Math.min(itemCount - 1, index + moveBy));
                 const targetOffset = (finalIndex - index) * itemHeight;
 
-                // Animate to exact target slot
                 localTranslation.value = withTiming(targetOffset, {
                     duration: 150,
                     easing: Easing.out(Easing.cubic)
@@ -128,8 +139,17 @@ function DraggableItem<T>({
                     runOnJS(onDragEnd)(index, finalIndex);
                 });
             }
-            isActivated.current = false;
+            isDragging.current = false;
+        })
+        .onFinalize(() => {
+            isDragging.current = false;
+            if (longPressTimeout.current) {
+                clearTimeout(longPressTimeout.current);
+                longPressTimeout.current = null;
+            }
         });
+
+    const gesture = panGesture;
 
     const animatedStyle = useAnimatedStyle(() => {
         return {
