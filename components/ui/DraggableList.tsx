@@ -1,29 +1,14 @@
 import * as Haptics from 'expo-haptics';
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     Easing,
     runOnJS,
-    SharedValue,
     useAnimatedStyle,
     useSharedValue,
-    withSpring
+    withTiming,
 } from 'react-native-reanimated';
-
-const SPRING_CONFIG = {
-    damping: 25,
-    stiffness: 250,
-    mass: 0.8,
-    overshootClamping: false,
-    restDisplacementThreshold: 0.01,
-    restSpeedThreshold: 2,
-};
-
-const TIMING_CONFIG = {
-    duration: 150,
-    easing: Easing.inOut(Easing.ease),
-};
 
 const triggerHaptic = () => {
     if (Platform.OS !== 'web') {
@@ -34,14 +19,15 @@ const triggerHaptic = () => {
 interface DraggableItemProps<T> {
     item: T;
     index: number;
-    // itemHeight matches the FULL height of the item slot (content + margin)
     itemHeight: number;
     renderItem: (item: T, index: number, isDragging: boolean) => React.ReactNode;
     onDragEnd: (from: number, to: number) => void;
     itemCount: number;
-    activeIndex: SharedValue<number>;
-    translationY: SharedValue<number>;
-    onDragStart: () => void;
+    isBeingDragged: boolean;
+    dragTranslation: number;
+    onDragStart: (index: number) => void;
+    onDragUpdate: (translation: number) => void;
+    pendingShift: number;
 }
 
 function DraggableItem<T>({
@@ -51,85 +37,108 @@ function DraggableItem<T>({
     renderItem,
     onDragEnd,
     itemCount,
-    activeIndex,
-    translationY,
+    isBeingDragged,
+    dragTranslation,
     onDragStart,
+    onDragUpdate,
+    pendingShift,
 }: DraggableItemProps<T>) {
+    const localTranslation = useSharedValue(0);
+    const localScale = useSharedValue(1);
+    const localOpacity = useSharedValue(1);
+    const shiftOffset = useSharedValue(0);
+
+    // Handle pending shift after reorder
+    useEffect(() => {
+        if (pendingShift !== 0) {
+            // Start from shifted position, animate to 0
+            shiftOffset.value = pendingShift;
+            shiftOffset.value = withTiming(0, {
+                duration: 200,
+                easing: Easing.out(Easing.cubic)
+            });
+        }
+    }, [pendingShift]);
+
+    // Sync with parent drag state
+    useEffect(() => {
+        if (isBeingDragged) {
+            localTranslation.value = dragTranslation;
+            localScale.value = withTiming(1.03, { duration: 100 });
+            localOpacity.value = withTiming(0.9, { duration: 100 });
+        } else {
+            localTranslation.value = 0;
+            localScale.value = withTiming(1, { duration: 100 });
+            localOpacity.value = withTiming(1, { duration: 100 });
+        }
+    }, [isBeingDragged, dragTranslation]);
+
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isActivated = useRef(false);
+
     const gesture = Gesture.Pan()
-        .activateAfterLongPress(200)
-        .onStart(() => {
-            if (activeIndex.value !== -1) return;
-            activeIndex.value = index;
-            runOnJS(triggerHaptic)();
-            runOnJS(onDragStart)();
+        .manualActivation(true)
+        .onTouchesDown((_, stateManager) => {
+            // Start long press timer
+            isActivated.current = false;
+            longPressTimer.current = setTimeout(() => {
+                isActivated.current = true;
+                stateManager.activate();
+                runOnJS(triggerHaptic)();
+                runOnJS(onDragStart)(index);
+            }, 200);
+        })
+        .onTouchesUp((_, stateManager) => {
+            // Cancel if released before long press
+            if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+            }
+            if (!isActivated.current) {
+                stateManager.fail();
+            }
+        })
+        .onTouchesCancelled((_, stateManager) => {
+            // Cancel on gesture cancelled (e.g., scroll started)
+            if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+            }
+            if (!isActivated.current) {
+                stateManager.fail();
+            }
         })
         .onUpdate((event) => {
-            if (activeIndex.value === index) {
-                translationY.value = event.translationY;
+            if (isActivated.current && isBeingDragged) {
+                localTranslation.value = event.translationY;
+                runOnJS(onDragUpdate)(event.translationY);
             }
         })
         .onEnd(() => {
-            if (activeIndex.value === index) {
-                const moveBy = Math.round(translationY.value / itemHeight);
+            if (isActivated.current && isBeingDragged) {
+                const moveBy = Math.round(localTranslation.value / itemHeight);
                 const finalIndex = Math.max(0, Math.min(itemCount - 1, index + moveBy));
-                const offset = (finalIndex - index) * itemHeight;
+                const targetOffset = (finalIndex - index) * itemHeight;
 
-                // Animate to the final slot ("New Physical Postion Offset")
-                // Then trigger the JS callback to update state.
-                // We do NOT reset activeIndex here. The local state update will trigger a reset.
-                translationY.value = withSpring(offset, SPRING_CONFIG, (finished) => {
-                    if (finished) {
-                        runOnJS(onDragEnd)(index, finalIndex);
-                    }
+                // Animate to exact target slot
+                localTranslation.value = withTiming(targetOffset, {
+                    duration: 150,
+                    easing: Easing.out(Easing.cubic)
+                }, () => {
+                    runOnJS(onDragEnd)(index, finalIndex);
                 });
             }
+            isActivated.current = false;
         });
 
     const animatedStyle = useAnimatedStyle(() => {
-        const isActive = activeIndex.value === index;
-        const currentTranslation = translationY.value;
-        const activeIdx = activeIndex.value;
-
-        // Use zIndex to keep dragged item on top
-        const zIndex = isActive ? 999 : 1;
-        const scale = withSpring(isActive ? 1.05 : 1, SPRING_CONFIG);
-
-        if (isActive) {
-            return {
-                transform: [
-                    { translateY: currentTranslation },
-                    { scale }
-                ],
-                zIndex,
-                shadowOpacity: withSpring(0.2),
-                shadowRadius: 10,
-                elevation: 10,
-            };
-        }
-
-        // Logic for shifting other items
-        let translateY = 0;
-        if (activeIdx !== -1) {
-            // Calculate where the dragged item effectively is right now
-            const dragRow = activeIdx + Math.round(currentTranslation / itemHeight);
-
-            // If dragging down (target > source)
-            if (activeIdx < index && dragRow >= index) {
-                translateY = -itemHeight;
-            }
-            // If dragging up (target < source)
-            else if (activeIdx > index && dragRow <= index) {
-                translateY = itemHeight;
-            }
-        }
-
         return {
             transform: [
-                { translateY: withSpring(translateY, SPRING_CONFIG) },
-                { scale }
+                { translateY: localTranslation.value + shiftOffset.value },
+                { scale: localScale.value }
             ],
-            zIndex,
-            elevation: 0
+            zIndex: isBeingDragged ? 999 : 1,
+            opacity: localOpacity.value,
         };
     });
 
@@ -137,7 +146,7 @@ function DraggableItem<T>({
         <Animated.View style={[{ marginBottom: 16 }, animatedStyle]}>
             <GestureDetector gesture={gesture}>
                 <Animated.View>
-                    {renderItem(item, index, activeIndex.value === index)}
+                    {renderItem(item, index, isBeingDragged)}
                 </Animated.View>
             </GestureDetector>
         </Animated.View>
@@ -148,7 +157,6 @@ interface DraggableListProps<T> {
     data: T[];
     renderItem: (item: T, index: number, isDragging: boolean) => React.ReactNode;
     onReorder: (fromIndex: number, toIndex: number) => void;
-    // itemHeight must include the bottom margin!
     itemHeight?: number;
     keyExtractor: (item: T, index: number) => string;
     style?: ViewStyle;
@@ -158,70 +166,94 @@ export function DraggableList<T>({
     data,
     renderItem,
     onReorder,
-    itemHeight = 120, // Default assumption
+    itemHeight = 120,
     keyExtractor,
     style,
 }: DraggableListProps<T>) {
-    // Local state for optimistic updates to avoid flash
     const [items, setItems] = useState(data);
+    const [activeIndex, setActiveIndex] = useState(-1);
+    const [dragTranslation, setDragTranslation] = useState(0);
+    const [pendingShifts, setPendingShifts] = useState<Record<string, number>>({});
 
-    // Derived shared values
-    const activeIndex = useSharedValue(-1);
-    const translationY = useSharedValue(0);
-
-    // Sync local state with props if they diverge (external updates)
+    // Sync with external data changes
     useEffect(() => {
         setItems(data);
     }, [data]);
 
-    // Cleanup shared values when layout changes (the drop/reorder)
-    // using useLayoutEffect ensures this runs before paint, preventing the flash
-    useLayoutEffect(() => {
-        if (activeIndex.value !== -1) {
-            activeIndex.value = -1;
-            translationY.value = 0;
-            // Trigger drop haptic
-            runOnJS(triggerHaptic)();
-        }
-    }, [items]);
+    const handleDragStart = useCallback((index: number) => {
+        setActiveIndex(index);
+    }, []);
 
-    const handleDragStart = useCallback(() => {
-        // Optional: Disable parent scroll here if possible
+    const handleDragUpdate = useCallback((translation: number) => {
+        setDragTranslation(translation);
     }, []);
 
     const handleDragEnd = useCallback((from: number, to: number) => {
+        setActiveIndex(-1);
+        setDragTranslation(0);
+
         if (from !== to) {
-            // Optimistic update
+            // Calculate shifts for affected items
+            const shifts: Record<string, number> = {};
             const newItems = [...items];
+
+            // The dragged item needs no shift (it's already at target)
+            const draggedKey = keyExtractor(items[from], from);
+            shifts[draggedKey] = 0;
+
+            // Items between from and to need to shift
+            if (from < to) {
+                // Moved down: items between shift up
+                for (let i = from + 1; i <= to; i++) {
+                    const key = keyExtractor(items[i], i);
+                    shifts[key] = itemHeight; // They were shifted up, now going back down
+                }
+            } else {
+                // Moved up: items between shift down
+                for (let i = to; i < from; i++) {
+                    const key = keyExtractor(items[i], i);
+                    shifts[key] = -itemHeight; // They were shifted down, now going back up
+                }
+            }
+
+            setPendingShifts(shifts);
+
+            // Update the data
             const [removed] = newItems.splice(from, 1);
             newItems.splice(to, 0, removed);
             setItems(newItems);
 
-            // Commit
+            triggerHaptic();
             onReorder(from, to);
-        } else {
-            // No change, just reset
-            activeIndex.value = -1;
-            translationY.value = 0;
+
+            // Clear shifts after animation
+            setTimeout(() => {
+                setPendingShifts({});
+            }, 250);
         }
-    }, [items, onReorder]);
+    }, [items, keyExtractor, itemHeight, onReorder]);
 
     return (
         <View style={style}>
-            {items.map((item, index) => (
-                <DraggableItem
-                    key={keyExtractor(item, index)}
-                    item={item}
-                    index={index}
-                    itemHeight={itemHeight}
-                    renderItem={renderItem}
-                    onDragEnd={handleDragEnd}
-                    onDragStart={handleDragStart}
-                    itemCount={items.length}
-                    activeIndex={activeIndex}
-                    translationY={translationY}
-                />
-            ))}
+            {items.map((item, index) => {
+                const key = keyExtractor(item, index);
+                return (
+                    <DraggableItem
+                        key={key}
+                        item={item}
+                        index={index}
+                        itemHeight={itemHeight}
+                        renderItem={renderItem}
+                        onDragEnd={handleDragEnd}
+                        onDragStart={handleDragStart}
+                        onDragUpdate={handleDragUpdate}
+                        itemCount={items.length}
+                        isBeingDragged={activeIndex === index}
+                        dragTranslation={dragTranslation}
+                        pendingShift={pendingShifts[key] || 0}
+                    />
+                );
+            })}
         </View>
     );
 }
