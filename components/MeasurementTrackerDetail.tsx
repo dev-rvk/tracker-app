@@ -197,7 +197,7 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
                             <TextInput
                                 value={newValue}
                                 onChangeText={setNewValue}
-                                keyboardType="numeric"
+                                keyboardType="decimal-pad"
                                 placeholder={`Enter ${tracker.unit}...`}
                                 placeholderTextColor="#a1a1aa"
                                 className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl px-5 py-4 text-zinc-950 dark:text-zinc-50 text-base"

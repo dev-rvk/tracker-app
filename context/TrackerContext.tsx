@@ -71,6 +71,9 @@ interface TrackerContextType {
     addMeasurementTracker: (tracker: Omit<MeasurementTracker, "id" | "createdAt" | "entries">) => Promise<void>;
     addMeasurementEntry: (trackerId: string, value: number) => Promise<void>;
     deleteMeasurementTracker: (id: string) => Promise<void>;
+    // Reorder
+    reorderGoals: (fromIndex: number, toIndex: number) => Promise<void>;
+    reorderMeasurements: (fromIndex: number, toIndex: number) => Promise<void>;
     // Util
     getGoalTracker: (id: string) => GoalTracker | undefined;
     getMeasurementTracker: (id: string) => MeasurementTracker | undefined;
@@ -286,6 +289,23 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
         await saveData(newStore);
     }, [store]);
 
+    // Reorder functions
+    const reorderGoals = useCallback(async (fromIndex: number, toIndex: number) => {
+        const newGoals = [...store.goals];
+        const [removed] = newGoals.splice(fromIndex, 1);
+        newGoals.splice(toIndex, 0, removed);
+        const newStore = { ...store, goals: newGoals };
+        await saveData(newStore);
+    }, [store]);
+
+    const reorderMeasurements = useCallback(async (fromIndex: number, toIndex: number) => {
+        const newMeasurements = [...store.measurements];
+        const [removed] = newMeasurements.splice(fromIndex, 1);
+        newMeasurements.splice(toIndex, 0, removed);
+        const newStore = { ...store, measurements: newMeasurements };
+        await saveData(newStore);
+    }, [store]);
+
     // Getters
     const getGoalTracker = useCallback((id: string) => store.goals.find(g => g.id === id), [store]);
     const getMeasurementTracker = useCallback((id: string) => store.measurements.find(m => m.id === id), [store]);
@@ -335,6 +355,8 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
                 deleteMeasurementTracker,
                 getGoalTracker,
                 getMeasurementTracker,
+                reorderGoals,
+                reorderMeasurements,
                 exportData,
                 importData,
             }}
