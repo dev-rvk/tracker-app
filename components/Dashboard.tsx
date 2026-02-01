@@ -1,12 +1,13 @@
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTrackers } from "@/context/TrackerContext";
+import { crossPlatformAlert } from "@/lib/crossPlatformAlert";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ArrowDown, ArrowUp, ChevronRight, Minus, Moon, Plus, Settings, Sun, Target, TrendingUp, X } from "lucide-react-native";
+import { ArrowDown, ArrowUp, ChevronRight, Download, Minus, Moon, Plus, Settings, Sun, Target, TrendingUp, Upload, X } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import React, { useState } from "react";
-import { ActivityIndicator, SafeAreaView, ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { ActivityIndicator, Platform, SafeAreaView, ScrollView, StatusBar, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type TabType = "goals" | "measurements";
 
@@ -14,8 +15,12 @@ export function Dashboard() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<TabType>("goals");
     const [showSettings, setShowSettings] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importText, setImportText] = useState("");
+    const [importing, setImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const { colorScheme, setColorScheme } = useColorScheme();
-    const { store, loading, incrementGoal, decrementGoal, getCurrentPeriodProgress, getStatsByTag } = useTrackers();
+    const { store, loading, incrementGoal, decrementGoal, getCurrentPeriodProgress, getStatsByTag, exportData, importData } = useTrackers();
 
     const isDark = colorScheme === "dark";
 
@@ -27,6 +32,88 @@ export function Dashboard() {
     const tagStats = getStatsByTag();
     const totalCurrentProgress = tagStats.reduce((acc, t) => acc + t.currentProgress, 0);
     const totalCurrentTarget = tagStats.reduce((acc, t) => acc + t.currentTarget, 0);
+
+    // Export data as JSON file download
+    const handleExport = () => {
+        const jsonData = exportData();
+        const filename = `trackr_backup_${new Date().toISOString().split('T')[0]}.json`;
+
+        if (Platform.OS === 'web') {
+            // Web: Create a download link
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            crossPlatformAlert("Success", "Data exported successfully!", [{ text: "OK" }]);
+        } else {
+            // Native: Copy to clipboard as fallback
+            // Could use expo-sharing for native file sharing
+            crossPlatformAlert("Export Data", `Copy this JSON data:\n\n${jsonData.substring(0, 100)}...`, [{ text: "OK" }]);
+        }
+    };
+
+    // Import data from JSON
+    const handleImport = async () => {
+        if (Platform.OS === 'web') {
+            // Web: Use file input
+            fileInputRef.current?.click();
+        } else {
+            // Native: Show modal to paste JSON
+            setShowImportModal(true);
+        }
+    };
+
+    // Handle file selection (web)
+    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const content = e.target?.result as string;
+            setImporting(true);
+            const success = await importData(content);
+            setImporting(false);
+
+            if (success) {
+                crossPlatformAlert("Success", "Data imported successfully!", [{ text: "OK" }]);
+                setShowSettings(false);
+            } else {
+                crossPlatformAlert("Error", "Failed to import data. Please check the JSON format.", [{ text: "OK" }]);
+            }
+        };
+        reader.readAsText(file);
+
+        // Reset input
+        if (event.target) {
+            event.target.value = '';
+        }
+    };
+
+    // Handle import from pasted text
+    const handleImportFromText = async () => {
+        if (!importText.trim()) {
+            crossPlatformAlert("Error", "Please paste JSON data", [{ text: "OK" }]);
+            return;
+        }
+
+        setImporting(true);
+        const success = await importData(importText);
+        setImporting(false);
+
+        if (success) {
+            crossPlatformAlert("Success", "Data imported successfully!", [{ text: "OK" }]);
+            setShowImportModal(false);
+            setImportText("");
+        } else {
+            crossPlatformAlert("Error", "Failed to import data. Please check the JSON format.", [{ text: "OK" }]);
+        }
+    };
 
     const getTagBgColor = (tagColor: string) => {
         // If it's already a hex color (custom tag), return it directly
@@ -533,6 +620,61 @@ export function Dashboard() {
                                 </View>
                             </Card>
 
+                            {/* Data Management Section */}
+                            <Text className="text-zinc-500 dark:text-zinc-400 text-sm font-medium uppercase tracking-wider mt-6 mb-3 px-1">Data Management</Text>
+
+                            {/* Export Data */}
+                            <Card variant="elevated" contentClassName="py-4 px-5">
+                                <TouchableOpacity
+                                    onPress={handleExport}
+                                    activeOpacity={0.7}
+                                    className="flex-row items-center gap-4"
+                                >
+                                    <View className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-500/20 items-center justify-center">
+                                        <Download size={24} color="#10b981" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-lg">Export Data</Text>
+                                        <Text className="text-zinc-500 dark:text-zinc-400 text-sm">Download backup as JSON</Text>
+                                    </View>
+                                    <ChevronRight size={20} color={isDark ? '#71717a' : '#a1a1aa'} />
+                                </TouchableOpacity>
+                            </Card>
+
+                            {/* Import Data */}
+                            <Card variant="elevated" contentClassName="py-4 px-5 mt-3">
+                                <TouchableOpacity
+                                    onPress={handleImport}
+                                    activeOpacity={0.7}
+                                    className="flex-row items-center gap-4"
+                                    disabled={importing}
+                                >
+                                    <View className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-500/20 items-center justify-center">
+                                        {importing ? (
+                                            <ActivityIndicator size="small" color="#f59e0b" />
+                                        ) : (
+                                            <Upload size={24} color="#f59e0b" />
+                                        )}
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-lg">Import Data</Text>
+                                        <Text className="text-zinc-500 dark:text-zinc-400 text-sm">Restore from JSON backup</Text>
+                                    </View>
+                                    <ChevronRight size={20} color={isDark ? '#71717a' : '#a1a1aa'} />
+                                </TouchableOpacity>
+                            </Card>
+
+                            {/* Hidden file input for web */}
+                            {Platform.OS === 'web' && (
+                                <input
+                                    ref={fileInputRef as any}
+                                    type="file"
+                                    accept=".json,application/json"
+                                    onChange={handleFileSelect as any}
+                                    style={{ display: 'none' }}
+                                />
+                            )}
+
                             <TouchableOpacity
                                 onPress={() => setShowSettings(false)}
                                 activeOpacity={0.8}
@@ -546,6 +688,56 @@ export function Dashboard() {
                             >
                                 <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 18 }}>Done</Text>
                             </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+
+                {/* Import Modal for Native */}
+                {showImportModal && (
+                    <View className="absolute inset-0 z-50 justify-center items-center">
+                        <TouchableOpacity
+                            className="absolute inset-0"
+                            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                            onPress={() => setShowImportModal(false)}
+                            activeOpacity={1}
+                        />
+                        <View className="bg-white dark:bg-zinc-900 rounded-2xl p-6 mx-6 w-full max-w-md shadow-2xl">
+                            <Text className="text-zinc-950 dark:text-zinc-50 text-xl font-bold mb-4">Import Data</Text>
+                            <Text className="text-zinc-500 dark:text-zinc-400 text-sm mb-4">Paste your JSON backup data below:</Text>
+                            <TextInput
+                                value={importText}
+                                onChangeText={setImportText}
+                                multiline
+                                numberOfLines={6}
+                                placeholder='{"goals": [], "measurements": []}'
+                                placeholderTextColor={isDark ? '#71717a' : '#a1a1aa'}
+                                className="bg-zinc-100 dark:bg-zinc-800 rounded-xl px-4 py-3 text-zinc-950 dark:text-zinc-50 text-sm mb-4"
+                                style={{ minHeight: 120, textAlignVertical: 'top' }}
+                            />
+                            <View className="flex-row gap-3">
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setShowImportModal(false);
+                                        setImportText("");
+                                    }}
+                                    activeOpacity={0.8}
+                                    className="flex-1 py-4 rounded-xl bg-zinc-200 dark:bg-zinc-700 items-center"
+                                >
+                                    <Text className="text-zinc-700 dark:text-zinc-300 font-semibold">Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={handleImportFromText}
+                                    activeOpacity={0.8}
+                                    disabled={importing}
+                                    className="flex-1 py-4 rounded-xl bg-indigo-500 items-center"
+                                >
+                                    {importing ? (
+                                        <ActivityIndicator size="small" color="#ffffff" />
+                                    ) : (
+                                        <Text className="text-white font-semibold">Import</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
                 )}

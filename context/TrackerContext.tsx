@@ -39,85 +39,10 @@ const getPeriodStart = (period: "daily" | "weekly" | "monthly", startDay: string
     }
 };
 
-// Sample data
+// Empty initial data - new users start with no trackers
 const initialData: TrackerStore = {
-    goals: [
-        {
-            id: "goal-1",
-            name: "Gym",
-            tag: "Health",
-            tagColor: "bg-tag-health",
-            frequency: 3,
-            period: "weekly",
-            startDay: "Mon",
-            completions: [
-                { periodStart: getPeriodStart("weekly", "Mon") - 7 * 24 * 60 * 60 * 1000, count: 3 },
-                { periodStart: getPeriodStart("weekly", "Mon") - 14 * 24 * 60 * 60 * 1000, count: 2 },
-                { periodStart: getPeriodStart("weekly", "Mon") - 21 * 24 * 60 * 60 * 1000, count: 3 },
-                { periodStart: getPeriodStart("weekly", "Mon"), count: 1 },
-            ],
-            createdAt: Date.now() - 28 * 24 * 60 * 60 * 1000,
-        },
-        {
-            id: "goal-2",
-            name: "Reading",
-            tag: "Academic",
-            tagColor: "bg-tag-academic",
-            frequency: 1,
-            period: "daily",
-            startDay: "Mon",
-            completions: [
-                { periodStart: getPeriodStart("daily", "Mon") - 24 * 60 * 60 * 1000, count: 1 },
-                { periodStart: getPeriodStart("daily", "Mon") - 48 * 60 * 60 * 1000, count: 1 },
-                { periodStart: getPeriodStart("daily", "Mon"), count: 0 },
-            ],
-            createdAt: Date.now() - 21 * 24 * 60 * 60 * 1000,
-        },
-        {
-            id: "goal-3",
-            name: "Meditation",
-            tag: "Health",
-            tagColor: "bg-tag-health",
-            frequency: 2,
-            period: "daily",
-            startDay: "Mon",
-            completions: [
-                { periodStart: getPeriodStart("daily", "Mon") - 24 * 60 * 60 * 1000, count: 2 },
-                { periodStart: getPeriodStart("daily", "Mon"), count: 1 },
-            ],
-            createdAt: Date.now() - 14 * 24 * 60 * 60 * 1000,
-        },
-    ],
-    measurements: [
-        {
-            id: "measure-1",
-            name: "Weight",
-            unit: "kg",
-            entries: [
-                { id: "e1", value: 75.0, date: Date.now() - 28 * 24 * 60 * 60 * 1000 },
-                { id: "e2", value: 74.5, date: Date.now() - 21 * 24 * 60 * 60 * 1000 },
-                { id: "e3", value: 74.2, date: Date.now() - 14 * 24 * 60 * 60 * 1000 },
-                { id: "e4", value: 73.5, date: Date.now() - 7 * 24 * 60 * 60 * 1000 },
-                { id: "e5", value: 73.0, date: Date.now() - 3 * 24 * 60 * 60 * 1000 },
-                { id: "e6", value: 72.8, date: Date.now() - 1 * 24 * 60 * 60 * 1000 },
-                { id: "e7", value: 72.5, date: Date.now() },
-            ],
-            createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
-        },
-        {
-            id: "measure-2",
-            name: "Waist",
-            unit: "cm",
-            entries: [
-                { id: "w1", value: 86, date: Date.now() - 21 * 24 * 60 * 60 * 1000 },
-                { id: "w2", value: 85, date: Date.now() - 14 * 24 * 60 * 60 * 1000 },
-                { id: "w3", value: 84, date: Date.now() - 7 * 24 * 60 * 60 * 1000 },
-                { id: "w4", value: 83, date: Date.now() - 2 * 24 * 60 * 60 * 1000 },
-                { id: "w5", value: 82, date: Date.now() },
-            ],
-            createdAt: Date.now() - 25 * 24 * 60 * 60 * 1000,
-        },
-    ],
+    goals: [],
+    measurements: [],
 };
 
 interface TagStats {
@@ -149,6 +74,9 @@ interface TrackerContextType {
     // Util
     getGoalTracker: (id: string) => GoalTracker | undefined;
     getMeasurementTracker: (id: string) => MeasurementTracker | undefined;
+    // Export/Import
+    exportData: () => string;
+    importData: (jsonString: string) => Promise<boolean>;
 }
 
 const TrackerContext = createContext<TrackerContextType | undefined>(undefined);
@@ -362,6 +290,33 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
     const getGoalTracker = useCallback((id: string) => store.goals.find(g => g.id === id), [store]);
     const getMeasurementTracker = useCallback((id: string) => store.measurements.find(m => m.id === id), [store]);
 
+    // Export data as JSON string
+    const exportData = useCallback(() => {
+        return JSON.stringify(store, null, 2);
+    }, [store]);
+
+    // Import data from JSON string
+    const importData = useCallback(async (jsonString: string): Promise<boolean> => {
+        try {
+            const data = JSON.parse(jsonString) as TrackerStore;
+
+            // Validate the data structure
+            if (!data.goals || !Array.isArray(data.goals)) {
+                throw new Error("Invalid data: missing goals array");
+            }
+            if (!data.measurements || !Array.isArray(data.measurements)) {
+                throw new Error("Invalid data: missing measurements array");
+            }
+
+            // Save to storage and update state
+            await saveData(data);
+            return true;
+        } catch (error) {
+            console.error("Import failed:", error);
+            return false;
+        }
+    }, [saveData]);
+
     return (
         <TrackerContext.Provider
             value={{
@@ -380,6 +335,8 @@ export function TrackerProvider({ children }: { children: React.ReactNode }) {
                 deleteMeasurementTracker,
                 getGoalTracker,
                 getMeasurementTracker,
+                exportData,
+                importData,
             }}
         >
             {children}
