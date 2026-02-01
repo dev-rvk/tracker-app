@@ -1,13 +1,14 @@
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTrackers } from "@/context/TrackerContext";
+import { crossPlatformAlert } from "@/lib/crossPlatformAlert";
 import { cn } from "@/lib/utils";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plus, Trash2, TrendingDown, TrendingUp } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import React, { useState } from "react";
-import { Alert, Dimensions, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Dimensions, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Circle, Line, Path, Svg, Text as SvgText } from "react-native-svg";
 
 interface MeasurementTrackerDetailProps {
@@ -48,7 +49,7 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
     const handleAddEntry = async () => {
         const value = parseFloat(newValue);
         if (isNaN(value)) {
-            Alert.alert("Error", "Please enter a valid number");
+            crossPlatformAlert("Error", "Please enter a valid number", [{ text: "OK" }]);
             return;
         }
 
@@ -57,14 +58,14 @@ export function MeasurementTrackerDetail({ trackerId }: MeasurementTrackerDetail
             await addMeasurementEntry(trackerId, value);
             setNewValue("");
         } catch (error) {
-            Alert.alert("Error", "Failed to add entry");
+            crossPlatformAlert("Error", "Failed to add entry", [{ text: "OK" }]);
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = () => {
-        Alert.alert(
+        crossPlatformAlert(
             "Delete Tracker",
             `Are you sure you want to delete "${tracker.name}"?`,
             [

@@ -1,16 +1,17 @@
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTrackers } from "@/context/TrackerContext";
+import { crossPlatformAlert } from "@/lib/crossPlatformAlert";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Check, Minus, Plus, Target, TrendingUp } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import React, { useState } from "react";
-import { Alert, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type TrackerType = "goal" | "measurement" | null;
 type Period = "daily" | "weekly" | "monthly";
-type Unit = "kg" | "cm" | "lbs" | "custom";
+type Unit = "kg" | "cm" | "lbs" | "inch" | "custom";
 
 const predefinedTags = [
     { name: "Health", color: "bg-tag-health" },
@@ -18,6 +19,9 @@ const predefinedTags = [
     { name: "Fitness", color: "bg-tag-fitness" },
     { name: "Work", color: "bg-tag-work" },
 ];
+
+// Custom tag colors (randomly assigned)
+const customTagColors = ["#10b981", "#6366f1", "#f59e0b", "#db2777", "#8b5cf6", "#06b6d4", "#ec4899"];
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const monthDates = Array.from({ length: 28 }, (_, i) => i + 1);
@@ -35,6 +39,8 @@ export function AddTracker() {
     const [frequency, setFrequency] = useState(1);
     const [period, setPeriod] = useState<Period>("daily");
     const [selectedTag, setSelectedTag] = useState<{ name: string; color: string } | null>(null);
+    const [customTagName, setCustomTagName] = useState("");
+    const [isCustomTag, setIsCustomTag] = useState(false);
     const [startDay, setStartDay] = useState("Mon");
     const [startDate, setStartDate] = useState(1);
 
@@ -78,11 +84,11 @@ export function AddTracker() {
 
     const handleCreateGoal = async () => {
         if (!goalName.trim()) {
-            Alert.alert("Error", "Please enter a goal name");
+            crossPlatformAlert("Error", "Please enter a goal name", [{ text: "OK" }]);
             return;
         }
         if (!selectedTag) {
-            Alert.alert("Error", "Please select a tag");
+            crossPlatformAlert("Error", "Please select a tag", [{ text: "OK" }]);
             return;
         }
 
@@ -100,7 +106,7 @@ export function AddTracker() {
 
             router.replace("/");
         } catch (error) {
-            Alert.alert("Error", "Failed to create tracker");
+            crossPlatformAlert("Error", "Failed to create tracker", [{ text: "OK" }]);
         } finally {
             setSaving(false);
         }
@@ -108,7 +114,7 @@ export function AddTracker() {
 
     const handleCreateMeasurement = async () => {
         if (!measurementName.trim()) {
-            Alert.alert("Error", "Please enter a tracker name");
+            crossPlatformAlert("Error", "Please enter a tracker name", [{ text: "OK" }]);
             return;
         }
 
@@ -123,7 +129,7 @@ export function AddTracker() {
 
             router.replace("/");
         } catch (error) {
-            Alert.alert("Error", "Failed to create tracker");
+            crossPlatformAlert("Error", "Failed to create tracker", [{ text: "OK" }]);
         } finally {
             setSaving(false);
         }
@@ -378,7 +384,10 @@ export function AddTracker() {
                                     {predefinedTags.map(tag => (
                                         <TouchableOpacity
                                             key={tag.name}
-                                            onPress={() => setSelectedTag(selectedTag?.name === tag.name ? null : tag)}
+                                            onPress={() => {
+                                                setIsCustomTag(false);
+                                                setSelectedTag(selectedTag?.name === tag.name ? null : tag);
+                                            }}
                                             activeOpacity={0.7}
                                             style={{
                                                 paddingHorizontal: 16,
@@ -387,24 +396,73 @@ export function AddTracker() {
                                                 flexDirection: 'row',
                                                 alignItems: 'center',
                                                 gap: 6,
-                                                backgroundColor: selectedTag?.name === tag.name
+                                                backgroundColor: selectedTag?.name === tag.name && !isCustomTag
                                                     ? (tag.color === 'bg-tag-health' ? '#10b981' :
                                                         tag.color === 'bg-tag-academic' ? '#6366f1' :
                                                             tag.color === 'bg-tag-fitness' ? '#f59e0b' : '#db2777')
                                                     : (isDark ? '#27272a' : '#f4f4f5'),
                                             }}
                                         >
-                                            {selectedTag?.name === tag.name && <Check size={14} color="#ffffff" />}
+                                            {selectedTag?.name === tag.name && !isCustomTag && <Check size={14} color="#ffffff" />}
                                             <Text style={{
                                                 fontSize: 14,
                                                 fontWeight: '600',
-                                                color: selectedTag?.name === tag.name ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a'),
+                                                color: selectedTag?.name === tag.name && !isCustomTag ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a'),
                                             }}>{tag.name}</Text>
                                         </TouchableOpacity>
                                     ))}
+                                    {/* Custom Tag Button */}
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            setIsCustomTag(true);
+                                            setSelectedTag(null);
+                                        }}
+                                        activeOpacity={0.7}
+                                        style={{
+                                            paddingHorizontal: 16,
+                                            paddingVertical: 8,
+                                            borderRadius: 20,
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            backgroundColor: isCustomTag ? '#8b5cf6' : (isDark ? '#27272a' : '#f4f4f5'),
+                                            borderWidth: 1,
+                                            borderStyle: 'dashed',
+                                            borderColor: isCustomTag ? '#8b5cf6' : (isDark ? '#3f3f46' : '#d4d4d8'),
+                                        }}
+                                    >
+                                        {isCustomTag && <Check size={14} color="#ffffff" />}
+                                        <Text style={{
+                                            fontSize: 14,
+                                            fontWeight: '600',
+                                            color: isCustomTag ? '#ffffff' : (isDark ? '#a1a1aa' : '#71717a'),
+                                        }}>+ Custom</Text>
+                                    </TouchableOpacity>
                                 </View>
-                                {!selectedTag && (
+                                {/* Custom Tag Input */}
+                                {isCustomTag && (
+                                    <TextInput
+                                        value={customTagName}
+                                        onChangeText={(text) => {
+                                            setCustomTagName(text);
+                                            if (text.trim()) {
+                                                // Assign a random color from the palette
+                                                const colorIndex = text.length % customTagColors.length;
+                                                setSelectedTag({ name: text.trim(), color: customTagColors[colorIndex] });
+                                            } else {
+                                                setSelectedTag(null);
+                                            }
+                                        }}
+                                        placeholder="Enter custom tag name..."
+                                        placeholderTextColor={isDark ? '#71717a' : '#a1a1aa'}
+                                        className="bg-zinc-100 dark:bg-zinc-800 rounded-xl px-4 py-3 text-zinc-950 dark:text-zinc-50 text-base mt-3"
+                                    />
+                                )}
+                                {!selectedTag && !isCustomTag && (
                                     <Text className="text-destructive text-sm mt-3">Please select a tag</Text>
+                                )}
+                                {isCustomTag && !customTagName.trim() && (
+                                    <Text className="text-destructive text-sm mt-3">Please enter a tag name</Text>
                                 )}
                             </Card>
 
@@ -483,6 +541,7 @@ export function AddTracker() {
                                         { value: "kg", label: "kg" },
                                         { value: "lbs", label: "lbs" },
                                         { value: "cm", label: "cm" },
+                                        { value: "inch", label: "in" },
                                         { value: "custom", label: "Custom" },
                                     ].map(u => (
                                         <TouchableOpacity

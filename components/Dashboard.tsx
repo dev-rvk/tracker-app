@@ -29,6 +29,9 @@ export function Dashboard() {
     const totalCurrentTarget = tagStats.reduce((acc, t) => acc + t.currentTarget, 0);
 
     const getTagBgColor = (tagColor: string) => {
+        // If it's already a hex color (custom tag), return it directly
+        if (tagColor.startsWith('#')) return tagColor;
+
         switch (tagColor) {
             case 'bg-tag-health': return '#10b981';
             case 'bg-tag-academic': return '#6366f1';

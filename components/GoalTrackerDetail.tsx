@@ -1,12 +1,13 @@
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTrackers } from "@/context/TrackerContext";
+import { crossPlatformAlert } from "@/lib/crossPlatformAlert";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import React, { useState } from "react";
-import { Alert, Dimensions, SafeAreaView, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import { Dimensions, SafeAreaView, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { Circle, Rect, Svg, Text as SvgText } from "react-native-svg";
 
 interface GoalTrackerDetailProps {
@@ -49,7 +50,7 @@ export function GoalTrackerDetail({ trackerId }: GoalTrackerDetailProps) {
     };
 
     const handleDelete = () => {
-        Alert.alert(
+        crossPlatformAlert(
             "Delete Tracker",
             `Are you sure you want to delete "${tracker.name}"?`,
             [
@@ -70,6 +71,9 @@ export function GoalTrackerDetail({ trackerId }: GoalTrackerDetailProps) {
     const isComplete = progress.count >= tracker.frequency;
 
     const getTagBgColor = (tagColor: string) => {
+        // If it's already a hex color (custom tag), return it directly
+        if (tagColor.startsWith('#')) return tagColor;
+
         switch (tagColor) {
             case 'bg-tag-health': return '#10b981';
             case 'bg-tag-academic': return '#6366f1';
