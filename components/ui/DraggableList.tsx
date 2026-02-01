@@ -49,54 +49,40 @@ function DraggableItem<T>({
     // Only enable pan gesture after long press
     const isDragging = useSharedValue(false);
 
-    const longPress = Gesture.LongPress()
-        .minDuration(200)
+    // Unified gesture handler
+    const pan = Gesture.Pan()
+        .activateAfterLongPress(200)
         .onStart(() => {
             isDragging.value = true;
             activeIndex.value = index;
             runOnJS(triggerHaptic)();
             runOnJS(onDragStart)();
-        });
-
-    const pan = Gesture.Pan()
-        .manualActivation(true)
-        .onTouchesMove((_e, stateManager) => {
-            if (!isDragging.value) {
-                stateManager.fail();
-            } else {
-                stateManager.activate();
-            }
         })
         .onUpdate((event) => {
-            if (isDragging.value) {
-                translationY.value = event.translationY;
-            }
+            translationY.value = event.translationY;
         })
         .onEnd(() => {
-            if (isDragging.value) {
-                const moveBy = Math.round(translationY.value / itemHeight);
-                const finalIndex = Math.max(0, Math.min(itemCount - 1, index + moveBy));
-                const targetOffset = (finalIndex - index) * itemHeight;
+            const moveBy = Math.round(translationY.value / itemHeight);
+            const finalIndex = Math.max(0, Math.min(itemCount - 1, index + moveBy));
+            const targetOffset = (finalIndex - index) * itemHeight;
 
-                translationY.value = withTiming(targetOffset, {
-                    duration: 150,
-                    easing: Easing.out(Easing.cubic)
-                }, () => {
-                    isDragging.value = false;
-                    runOnJS(onReorder)(index, finalIndex);
-                });
-            }
+            translationY.value = withTiming(targetOffset, {
+                duration: 150,
+                easing: Easing.out(Easing.cubic)
+            }, () => {
+                isDragging.value = false;
+                runOnJS(onReorder)(index, finalIndex);
+            });
         })
-        .onFinalize(() => {
-            // Ensure cleanup
-            if (!isDragging.value && activeIndex.value === index) {
+        .onFinalize((success) => {
+            // If gesture failed/cancelled, clean up immediately
+            // If success, 'onEnd' handles cleanup after animation
+            if (!success && activeIndex.value === index) {
+                isDragging.value = false;
                 activeIndex.value = -1;
                 translationY.value = 0;
             }
         });
-
-    // Race the gestures: LongPress wins -> Drag allowed. Scroll wins -> LongPress fails.
-    const gesture = Gesture.Simultaneous(longPress, pan);
 
     const animatedStyle = useAnimatedStyle(() => {
         const isActive = activeIndex.value === index;
@@ -145,8 +131,8 @@ function DraggableItem<T>({
 
     return (
         <Animated.View style={[{ marginBottom: 16 }, animatedStyle]}>
-            <GestureDetector gesture={gesture}>
-                <Animated.View>
+            <GestureDetector gesture={pan}>
+                <Animated.View style={Platform.OS === 'web' ? { touchAction: 'pan-y' } as any : undefined}>
                     {renderItem(item, index, activeIndex.value === index)}
                 </Animated.View>
             </GestureDetector>
