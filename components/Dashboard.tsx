@@ -1,14 +1,15 @@
 import { Card } from "@/components/ui/Card";
-import { DraggableList } from "@/components/ui/DraggableList";
+import { DragHandle, DraggableList } from "@/components/ui/DraggableList";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTrackers } from "@/context/TrackerContext";
 import { crossPlatformAlert } from "@/lib/crossPlatformAlert";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ArrowDown, ArrowUp, ChevronRight, Download, Minus, Moon, Plus, Settings, Sun, Target, TrendingUp, Upload, X } from "lucide-react-native";
+import { ArrowDown, ArrowUp, ChevronRight, Download, GripVertical, Minus, Moon, Plus, Settings, Sun, Target, TrendingUp, Upload, X } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import React, { useRef, useState } from "react";
 import { ActivityIndicator, Platform, SafeAreaView, ScrollView, StatusBar, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+
 
 type TabType = "goals" | "measurements";
 
@@ -303,141 +304,161 @@ export function Dashboard() {
                                     keyExtractor={(tracker) => tracker.id}
                                     itemHeight={140}
                                     onReorder={(from, to) => reorderGoals(from, to)}
-                                    renderItem={(tracker) => {
+                                    renderItem={(tracker, _index, _isDragging, dragHandleProps) => {
                                         const progress = getCurrentPeriodProgress(tracker.id);
                                         const tagColor = getTagBgColor(tracker.tagColor);
 
                                         return (
-                                            <Card variant="elevated" contentClassName="p-5">
-                                                <View className="flex-row items-start justify-between mb-3">
-                                                    <View className="flex-1">
-                                                        <View className="flex-row items-center gap-3">
-                                                            <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-xl">{tracker.name}</Text>
+                                            <Card variant="elevated" contentClassName="p-0">
+                                                <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
+                                                    {/* Drag Handle */}
+                                                    <DragHandle
+                                                        dragHandleProps={dragHandleProps}
+                                                        style={{
+                                                            width: 28,
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                                                            borderTopLeftRadius: 16,
+                                                            borderBottomLeftRadius: 16,
+                                                        }}
+                                                    >
+                                                        <GripVertical size={20} color={isDark ? '#52525b' : '#a1a1aa'} />
+                                                    </DragHandle>
+
+                                                    {/* Card Content */}
+                                                    <View style={{ flex: 1, padding: 20 }}>
+                                                        <View className="flex-row items-start justify-between mb-3">
+                                                            <View className="flex-1">
+                                                                <View className="flex-row items-center gap-3">
+                                                                    <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-xl">{tracker.name}</Text>
+                                                                    <View style={{
+                                                                        paddingHorizontal: 10,
+                                                                        paddingVertical: 3,
+                                                                        borderRadius: 12,
+                                                                        backgroundColor: tagColor,
+                                                                    }}>
+                                                                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#ffffff', textTransform: 'uppercase' }}>
+                                                                            {tracker.tag}
+                                                                        </Text>
+                                                                    </View>
+                                                                </View>
+                                                                <Text className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
+                                                                    {getPeriodDescription(tracker)}
+                                                                </Text>
+                                                            </View>
+                                                            <TouchableOpacity
+                                                                onPress={() => router.push(`/tracker/${tracker.id}?type=goal`)}
+                                                                activeOpacity={0.6}
+                                                                style={{ padding: 4 }}
+                                                            >
+                                                                <ChevronRight size={24} color={isDark ? '#71717a' : '#a1a1aa'} />
+                                                            </TouchableOpacity>
+                                                        </View>
+
+                                                        {/* Progress Counter with +/- buttons - Fixed layout */}
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                                            {/* Decrement Button */}
+                                                            <TouchableOpacity
+                                                                onPress={() => decrementGoal(tracker.id)}
+                                                                disabled={progress.count <= 0}
+                                                                activeOpacity={0.7}
+                                                                style={{
+                                                                    width: 36,
+                                                                    height: 36,
+                                                                    borderRadius: 18,
+                                                                    backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    opacity: progress.count <= 0 ? 0.4 : 1,
+                                                                }}
+                                                            >
+                                                                <Minus size={18} color={isDark ? '#ffffff' : '#09090b'} />
+                                                            </TouchableOpacity>
+
+                                                            {/* Fixed width container for 4 circles */}
                                                             <View style={{
-                                                                paddingHorizontal: 10,
-                                                                paddingVertical: 3,
-                                                                borderRadius: 12,
-                                                                backgroundColor: tagColor,
+                                                                width: 130,
+                                                                marginHorizontal: 6,
+                                                                flexDirection: 'row',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: 6,
                                                             }}>
-                                                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#ffffff', textTransform: 'uppercase' }}>
-                                                                    {tracker.tag}
+                                                                {(() => {
+                                                                    // Always show exactly 4 circles (or fewer if frequency < 4)
+                                                                    const maxCircles = Math.min(4, tracker.frequency);
+
+                                                                    // Calculate starting index to show:
+                                                                    // - Show last 3 completed + 1 unchecked (until all done)
+                                                                    // - If all done, show the last 4 completed
+                                                                    let startIdx = 0;
+                                                                    if (tracker.frequency > 4) {
+                                                                        if (progress.count >= tracker.frequency) {
+                                                                            // All complete: show last 4
+                                                                            startIdx = tracker.frequency - 4;
+                                                                        } else {
+                                                                            // Show up to 3 completed + 1 unchecked
+                                                                            startIdx = Math.max(0, progress.count - 3);
+                                                                        }
+                                                                    }
+
+                                                                    return Array.from({ length: maxCircles }).map((_, idx) => {
+                                                                        const actualIdx = startIdx + idx;
+                                                                        const isCompleted = actualIdx < progress.count;
+                                                                        return (
+                                                                            <View
+                                                                                key={idx}
+                                                                                style={{
+                                                                                    width: 28,
+                                                                                    height: 28,
+                                                                                    borderRadius: 14,
+                                                                                    backgroundColor: isCompleted
+                                                                                        ? tagColor
+                                                                                        : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
+                                                                                    alignItems: 'center',
+                                                                                    justifyContent: 'center',
+                                                                                }}
+                                                                            >
+                                                                                {isCompleted && (
+                                                                                    <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 11 }}>✓</Text>
+                                                                                )}
+                                                                            </View>
+                                                                        );
+                                                                    });
+                                                                })()}
+                                                            </View>
+
+                                                            {/* Increment Button */}
+                                                            <TouchableOpacity
+                                                                onPress={() => incrementGoal(tracker.id)}
+                                                                disabled={progress.count >= tracker.frequency}
+                                                                activeOpacity={0.7}
+                                                                style={{
+                                                                    width: 36,
+                                                                    height: 36,
+                                                                    borderRadius: 18,
+                                                                    backgroundColor: progress.count >= tracker.frequency
+                                                                        ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)')
+                                                                        : tagColor,
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    opacity: progress.count >= tracker.frequency ? 0.4 : 1,
+                                                                }}
+                                                            >
+                                                                <Plus size={18} color={progress.count >= tracker.frequency ? (isDark ? '#ffffff' : '#09090b') : '#ffffff'} />
+                                                            </TouchableOpacity>
+
+                                                            {/* Progress text vertical stack */}
+                                                            <View style={{ marginLeft: 'auto', width: 80, alignItems: 'center' }}>
+                                                                <Text className="text-zinc-950 dark:text-zinc-50 font-bold text-2xl leading-tight">
+                                                                    {progress.count}/{tracker.frequency}
+                                                                </Text>
+                                                                <Text className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+                                                                    {getPeriodLabel(tracker.period)}
                                                                 </Text>
                                                             </View>
                                                         </View>
-                                                        <Text className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
-                                                            {getPeriodDescription(tracker)}
-                                                        </Text>
-                                                    </View>
-                                                    <TouchableOpacity
-                                                        onPress={() => router.push(`/tracker/${tracker.id}?type=goal`)}
-                                                        activeOpacity={0.6}
-                                                        style={{ padding: 4 }}
-                                                    >
-                                                        <ChevronRight size={24} color={isDark ? '#71717a' : '#a1a1aa'} />
-                                                    </TouchableOpacity>
-                                                </View>
-
-                                                {/* Progress Counter with +/- buttons - Fixed layout */}
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                                                    {/* Decrement Button */}
-                                                    <TouchableOpacity
-                                                        onPress={() => decrementGoal(tracker.id)}
-                                                        disabled={progress.count <= 0}
-                                                        activeOpacity={0.7}
-                                                        style={{
-                                                            width: 36,
-                                                            height: 36,
-                                                            borderRadius: 18,
-                                                            backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            opacity: progress.count <= 0 ? 0.4 : 1,
-                                                        }}
-                                                    >
-                                                        <Minus size={18} color={isDark ? '#ffffff' : '#09090b'} />
-                                                    </TouchableOpacity>
-
-                                                    {/* Fixed width container for 4 circles */}
-                                                    <View style={{
-                                                        width: 130,
-                                                        marginHorizontal: 6,
-                                                        flexDirection: 'row',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: 6,
-                                                    }}>
-                                                        {(() => {
-                                                            // Always show exactly 4 circles (or fewer if frequency < 4)
-                                                            const maxCircles = Math.min(4, tracker.frequency);
-
-                                                            // Calculate starting index to show:
-                                                            // - Show last 3 completed + 1 unchecked (until all done)
-                                                            // - If all done, show the last 4 completed
-                                                            let startIdx = 0;
-                                                            if (tracker.frequency > 4) {
-                                                                if (progress.count >= tracker.frequency) {
-                                                                    // All complete: show last 4
-                                                                    startIdx = tracker.frequency - 4;
-                                                                } else {
-                                                                    // Show up to 3 completed + 1 unchecked
-                                                                    startIdx = Math.max(0, progress.count - 3);
-                                                                }
-                                                            }
-
-                                                            return Array.from({ length: maxCircles }).map((_, idx) => {
-                                                                const actualIdx = startIdx + idx;
-                                                                const isCompleted = actualIdx < progress.count;
-                                                                return (
-                                                                    <View
-                                                                        key={idx}
-                                                                        style={{
-                                                                            width: 28,
-                                                                            height: 28,
-                                                                            borderRadius: 14,
-                                                                            backgroundColor: isCompleted
-                                                                                ? tagColor
-                                                                                : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
-                                                                            alignItems: 'center',
-                                                                            justifyContent: 'center',
-                                                                        }}
-                                                                    >
-                                                                        {isCompleted && (
-                                                                            <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 11 }}>✓</Text>
-                                                                        )}
-                                                                    </View>
-                                                                );
-                                                            });
-                                                        })()}
-                                                    </View>
-
-                                                    {/* Increment Button */}
-                                                    <TouchableOpacity
-                                                        onPress={() => incrementGoal(tracker.id)}
-                                                        disabled={progress.count >= tracker.frequency}
-                                                        activeOpacity={0.7}
-                                                        style={{
-                                                            width: 36,
-                                                            height: 36,
-                                                            borderRadius: 18,
-                                                            backgroundColor: progress.count >= tracker.frequency
-                                                                ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)')
-                                                                : tagColor,
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            opacity: progress.count >= tracker.frequency ? 0.4 : 1,
-                                                        }}
-                                                    >
-                                                        <Plus size={18} color={progress.count >= tracker.frequency ? (isDark ? '#ffffff' : '#09090b') : '#ffffff'} />
-                                                    </TouchableOpacity>
-
-                                                    {/* Progress text vertical stack */}
-                                                    <View style={{ marginLeft: 'auto', width: 80, alignItems: 'center' }}>
-                                                        <Text className="text-zinc-950 dark:text-zinc-50 font-bold text-2xl leading-tight">
-                                                            {progress.count}/{tracker.frequency}
-                                                        </Text>
-                                                        <Text className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-                                                            {getPeriodLabel(tracker.period)}
-                                                        </Text>
                                                     </View>
                                                 </View>
                                             </Card>
@@ -499,7 +520,7 @@ export function Dashboard() {
                                     keyExtractor={(tracker) => tracker.id}
                                     itemHeight={100}
                                     onReorder={(from, to) => reorderMeasurements(from, to)}
-                                    renderItem={(tracker) => {
+                                    renderItem={(tracker, _index, _isDragging, dragHandleProps) => {
                                         const latestEntry = tracker.entries[tracker.entries.length - 1];
                                         const previousEntry = tracker.entries[tracker.entries.length - 2];
                                         const currentValue = latestEntry?.value ?? 0;
@@ -516,53 +537,71 @@ export function Dashboard() {
                                         };
 
                                         return (
-                                            <Card variant="elevated" contentClassName="p-5">
-                                                <TouchableOpacity
-                                                    onPress={() => router.push(`/tracker/${tracker.id}?type=measurement`)}
-                                                    activeOpacity={0.8}
-                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-                                                >
-                                                    <View>
-                                                        <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-xl">{tracker.name}</Text>
-                                                        <Text className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
-                                                            Updated {latestEntry ? getTimeAgo(latestEntry.date) : "Never"}
-                                                        </Text>
-                                                    </View>
-                                                    <View className="flex-row items-center gap-4">
-                                                        <View className="items-end">
-                                                            <Text className="text-zinc-950 dark:text-zinc-50 text-2xl font-bold">
-                                                                {currentValue}
-                                                                <Text className="text-zinc-500 dark:text-zinc-400 text-base font-normal"> {tracker.unit}</Text>
+                                            <Card variant="elevated" contentClassName="p-0">
+                                                <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
+                                                    {/* Drag Handle */}
+                                                    <DragHandle
+                                                        dragHandleProps={dragHandleProps}
+                                                        style={{
+                                                            width: 28,
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                                                            borderTopLeftRadius: 16,
+                                                            borderBottomLeftRadius: 16,
+                                                        }}
+                                                    >
+                                                        <GripVertical size={20} color={isDark ? '#52525b' : '#a1a1aa'} />
+                                                    </DragHandle>
+
+                                                    {/* Card Content */}
+                                                    <TouchableOpacity
+                                                        onPress={() => router.push(`/tracker/${tracker.id}?type=measurement`)}
+                                                        activeOpacity={0.8}
+                                                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 }}
+                                                    >
+                                                        <View>
+                                                            <Text className="text-zinc-950 dark:text-zinc-50 font-semibold text-xl">{tracker.name}</Text>
+                                                            <Text className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
+                                                                Updated {latestEntry ? getTimeAgo(latestEntry.date) : "Never"}
                                                             </Text>
-                                                            {previousEntry && trend !== "same" && (
-                                                                <View style={{
-                                                                    flexDirection: 'row',
-                                                                    alignItems: 'center',
-                                                                    gap: 4,
-                                                                    marginTop: 4,
-                                                                    backgroundColor: trend === "down" ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                                                    paddingHorizontal: 8,
-                                                                    paddingVertical: 2,
-                                                                    borderRadius: 10,
-                                                                }}>
-                                                                    {trend === "down" ? (
-                                                                        <ArrowDown size={12} color="#10b981" strokeWidth={3} />
-                                                                    ) : (
-                                                                        <ArrowUp size={12} color="#ef4444" strokeWidth={3} />
-                                                                    )}
-                                                                    <Text style={{
-                                                                        fontSize: 12,
-                                                                        fontWeight: '600',
-                                                                        color: trend === "down" ? '#10b981' : '#ef4444',
-                                                                    }}>
-                                                                        {diff.toFixed(1)}
-                                                                    </Text>
-                                                                </View>
-                                                            )}
                                                         </View>
-                                                        <ChevronRight size={24} color={isDark ? '#71717a' : '#a1a1aa'} />
-                                                    </View>
-                                                </TouchableOpacity>
+                                                        <View className="flex-row items-center gap-4">
+                                                            <View className="items-end">
+                                                                <Text className="text-zinc-950 dark:text-zinc-50 text-2xl font-bold">
+                                                                    {currentValue}
+                                                                    <Text className="text-zinc-500 dark:text-zinc-400 text-base font-normal"> {tracker.unit}</Text>
+                                                                </Text>
+                                                                {previousEntry && trend !== "same" && (
+                                                                    <View style={{
+                                                                        flexDirection: 'row',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                        marginTop: 4,
+                                                                        backgroundColor: trend === "down" ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                                        paddingHorizontal: 8,
+                                                                        paddingVertical: 2,
+                                                                        borderRadius: 10,
+                                                                    }}>
+                                                                        {trend === "down" ? (
+                                                                            <ArrowDown size={12} color="#10b981" strokeWidth={3} />
+                                                                        ) : (
+                                                                            <ArrowUp size={12} color="#ef4444" strokeWidth={3} />
+                                                                        )}
+                                                                        <Text style={{
+                                                                            fontSize: 12,
+                                                                            fontWeight: '600',
+                                                                            color: trend === "down" ? '#10b981' : '#ef4444',
+                                                                        }}>
+                                                                            {diff.toFixed(1)}
+                                                                        </Text>
+                                                                    </View>
+                                                                )}
+                                                            </View>
+                                                            <ChevronRight size={24} color={isDark ? '#71717a' : '#a1a1aa'} />
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                </View>
                                             </Card>
                                         );
                                     }}

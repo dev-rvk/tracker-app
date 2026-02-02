@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, View, ViewStyle } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, PanGesture } from 'react-native-gesture-handler';
 import Animated, {
     Easing,
     runOnJS,
@@ -23,11 +23,24 @@ const SHIFT_TIMING_CONFIG = {
     easing: Easing.out(Easing.cubic),
 };
 
+// Props passed to the drag handle element
+export interface DragHandleProps {
+    // For web: attach these to the drag handle element
+    onPointerDown?: (e: React.PointerEvent<any>) => void;
+    onPointerMove?: (e: React.PointerEvent<any>) => void;
+    onPointerUp?: (e: React.PointerEvent<any>) => void;
+    onPointerLeave?: () => void;
+    // For native: wrap the drag handle with GestureDetector using this gesture
+    gesture?: PanGesture;
+    // Style to apply (cursor, touch-action)
+    style?: ViewStyle & { cursor?: string; touchAction?: string };
+}
+
 interface DraggableItemProps<T> {
     item: T;
     index: number;
     itemHeight: number;
-    renderItem: (item: T, index: number, isDragging: boolean) => React.ReactNode;
+    renderItem: (item: T, index: number, isDragging: boolean, dragHandleProps: DragHandleProps) => React.ReactNode;
     itemCount: number;
     activeIndex: SharedValue<number>;
     translationY: SharedValue<number>;
@@ -46,12 +59,76 @@ function DraggableItem<T>({
     onDragStart,
     onReorder,
 }: DraggableItemProps<T>) {
-    // Only enable pan gesture after long press
+    // Shared values for animation
     const isDragging = useSharedValue(false);
 
-    // Unified gesture handler
-    const pan = Gesture.Pan()
-        .activateAfterLongPress(200)
+    // Refs for web pointer tracking
+    const startY = useRef(0);
+    const pointerIdRef = useRef<number | null>(null);
+    const elementRef = useRef<any>(null);
+
+    // Web pointer handlers for drag handle
+    const handlePointerDown = useCallback((e: React.PointerEvent<any>) => {
+        if (Platform.OS !== 'web') return;
+
+        startY.current = e.clientY;
+        pointerIdRef.current = e.pointerId;
+        elementRef.current = e.currentTarget;
+
+        // Immediately start dragging (no long press needed for the handle)
+        isDragging.value = true;
+        activeIndex.value = index;
+
+        // Capture pointer to track moves even outside the element
+        if (elementRef.current && pointerIdRef.current !== null) {
+            elementRef.current.setPointerCapture(pointerIdRef.current);
+        }
+
+        triggerHaptic();
+        onDragStart();
+    }, [index, onDragStart]);
+
+    const handlePointerMove = useCallback((e: React.PointerEvent<any>) => {
+        if (Platform.OS !== 'web') return;
+        if (!isDragging.value) return;
+
+        const deltaY = e.clientY - startY.current;
+        e.preventDefault();
+        translationY.value = deltaY;
+    }, []);
+
+    const handlePointerUp = useCallback((e: React.PointerEvent<any>) => {
+        if (Platform.OS !== 'web') return;
+
+        // Release pointer capture
+        if (elementRef.current && pointerIdRef.current !== null) {
+            try {
+                elementRef.current.releasePointerCapture(pointerIdRef.current);
+            } catch { }
+        }
+        pointerIdRef.current = null;
+
+        if (isDragging.value) {
+            const moveBy = Math.round(translationY.value / itemHeight);
+            const finalIndex = Math.max(0, Math.min(itemCount - 1, index + moveBy));
+            const targetOffset = (finalIndex - index) * itemHeight;
+
+            translationY.value = withTiming(targetOffset, {
+                duration: 150,
+                easing: Easing.out(Easing.cubic)
+            }, () => {
+                isDragging.value = false;
+                runOnJS(onReorder)(index, finalIndex);
+            });
+        }
+    }, [itemHeight, itemCount, index, onReorder]);
+
+    const handlePointerLeave = useCallback(() => {
+        // Pointer capture handles this case, no action needed
+    }, []);
+
+    // Native gesture handler for drag handle
+    const panGesture = Gesture.Pan()
         .onStart(() => {
             isDragging.value = true;
             activeIndex.value = index;
@@ -74,15 +151,30 @@ function DraggableItem<T>({
                 runOnJS(onReorder)(index, finalIndex);
             });
         })
-        .onFinalize((success) => {
-            // If gesture failed/cancelled, clean up immediately
-            // If success, 'onEnd' handles cleanup after animation
+        .onFinalize((_, success) => {
             if (!success && activeIndex.value === index) {
                 isDragging.value = false;
                 activeIndex.value = -1;
                 translationY.value = 0;
             }
         });
+
+    // Drag handle props to pass to renderItem
+    const dragHandleProps: DragHandleProps = Platform.OS === 'web'
+        ? {
+            onPointerDown: handlePointerDown,
+            onPointerMove: handlePointerMove,
+            onPointerUp: handlePointerUp,
+            onPointerLeave: handlePointerLeave,
+            style: {
+                cursor: 'grab',
+                touchAction: 'none',
+            } as any,
+        }
+        : {
+            gesture: panGesture,
+            style: {},
+        };
 
     const animatedStyle = useAnimatedStyle(() => {
         const isActive = activeIndex.value === index;
@@ -131,18 +223,14 @@ function DraggableItem<T>({
 
     return (
         <Animated.View style={[{ marginBottom: 16 }, animatedStyle]}>
-            <GestureDetector gesture={pan}>
-                <Animated.View style={Platform.OS === 'web' ? { touchAction: 'pan-y' } as any : undefined}>
-                    {renderItem(item, index, activeIndex.value === index)}
-                </Animated.View>
-            </GestureDetector>
+            {renderItem(item, index, activeIndex.value === index, dragHandleProps)}
         </Animated.View>
     );
 }
 
 interface DraggableListProps<T> {
     data: T[];
-    renderItem: (item: T, index: number, isDragging: boolean) => React.ReactNode;
+    renderItem: (item: T, index: number, isDragging: boolean, dragHandleProps: DragHandleProps) => React.ReactNode;
     onReorder: (fromIndex: number, toIndex: number) => void;
     itemHeight?: number;
     keyExtractor: (item: T, index: number) => string;
@@ -184,7 +272,6 @@ export function DraggableList<T>({
         onReorder(from, to);
 
         // Reset shared values after a frame to allow React to render new order
-        // This makes the transition seamless because visual positions match new layout
         requestAnimationFrame(() => {
             activeIndex.value = -1;
             translationY.value = 0;
@@ -208,5 +295,37 @@ export function DraggableList<T>({
                 />
             ))}
         </View>
+    );
+}
+
+// Convenience component for the drag handle (optional use)
+interface DragHandleComponentProps {
+    dragHandleProps: DragHandleProps;
+    children: React.ReactNode;
+    style?: ViewStyle;
+}
+
+export function DragHandle({ dragHandleProps, children, style }: DragHandleComponentProps) {
+    if (Platform.OS === 'web') {
+        return (
+            <View
+                style={[dragHandleProps.style, style] as any}
+                onPointerDown={dragHandleProps.onPointerDown as any}
+                onPointerMove={dragHandleProps.onPointerMove as any}
+                onPointerUp={dragHandleProps.onPointerUp as any}
+                onPointerLeave={dragHandleProps.onPointerLeave as any}
+            >
+                {children}
+            </View>
+        );
+    }
+
+    // Native: wrap with GestureDetector
+    return (
+        <GestureDetector gesture={dragHandleProps.gesture!}>
+            <Animated.View style={style}>
+                {children}
+            </Animated.View>
+        </GestureDetector>
     );
 }
